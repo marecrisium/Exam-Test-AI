@@ -14,16 +14,26 @@ export const Dropzone: React.FC<DropzoneProps> = ({ onFileSelect }) => {
   const handleFiles = useCallback((files: FileList | null) => {
     if (!files || files.length === 0) return;
     
-    const acceptedFiles = Array.from(files).filter(
+    let fileArray = Array.from(files);
+    let mainError: string | null = null;
+
+    // Check for file count limit
+    if (fileArray.length > 20) {
+        mainError = "Tek seferde en fazla 20 dosya seçebilirsiniz.";
+        fileArray = fileArray.slice(0, 20);
+    }
+
+    const acceptedFiles = fileArray.filter(
         file => file.type === 'image/png' || file.type === 'image/jpeg'
     );
-    
-    if (acceptedFiles.length !== files.length) {
-        setError('Lütfen sadece PNG veya JPEG formatında dosyalar seçin.');
-    } else {
-        setError(null);
+
+    // Check for file type errors, only if a count error isn't already set
+    if (acceptedFiles.length !== fileArray.length && !mainError) {
+        mainError = 'Lütfen sadece PNG veya JPEG formatında dosyalar seçin.';
     }
-    
+
+    setError(mainError);
+
     if (acceptedFiles.length > 0) {
         onFileSelect(acceptedFiles);
     }
@@ -88,7 +98,7 @@ export const Dropzone: React.FC<DropzoneProps> = ({ onFileSelect }) => {
         <p className="mb-2 text-sm font-semibold text-slate-700">
             Dosyaları sürükleyip bırakın veya seçmek için tıklayın
         </p>
-        <p className="text-sm text-slate-500">PNG veya JPEG</p>
+        <p className="text-sm text-slate-500">PNG veya JPEG (En fazla 20 adet)</p>
       </div>
       {error && <p className="absolute bottom-4 text-sm text-red-500">{error}</p>}
     </div>
