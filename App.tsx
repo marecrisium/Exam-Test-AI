@@ -9,6 +9,8 @@ import { Header } from './components/Header';
 import { AnalyzeButton } from './components/AnalyzeButton';
 import { AnswerKeyDropzone } from './components/AnswerKeyDropzone';
 import { AnswerKeyDisplay } from './components/AnswerKeyDisplay';
+import { HelpModal } from './components/HelpModal';
+import { QuestionMarkCircleIcon } from './components/icons';
 
 interface UploadedFile {
   id: string;
@@ -29,6 +31,7 @@ const App: React.FC = () => {
   const [questionCount, setQuestionCount] = useState<number>(25);
   const [consensusKey, setConsensusKey] = useState<string[] | null>(null);
   const [progress, setProgress] = useState({ current: 0, total: 0, message: '' });
+  const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
 
   useEffect(() => {
     if (!isAnswerKeyAnalysis) {
@@ -62,6 +65,7 @@ const App: React.FC = () => {
       file: selectedFile,
       url: URL.createObjectURL(selectedFile),
     });
+    setConsensusKey(null);
     setError(null);
   }, [answerKeyFile]);
 
@@ -105,22 +109,29 @@ const App: React.FC = () => {
     setError(null);
     setAnalysisResults([]);
     setSelectedResultIds(new Set());
-    setConsensusKey(null);
     setProgress({ current: 0, total: files.length, message: '' });
 
     try {
       if (isAnswerKeyAnalysis && answerKeyFile) {
-        // --- Answer Key Analysis Mode ---
-        setProgress(prev => ({ ...prev, message: 'Cevap anahtarı analiz ediliyor...' }));
-        const answerKeyBase64 = await fileToBase64(answerKeyFile.file);
-        const key = await analyzeAnswerKey(answerKeyBase64, questionCount);
-        setConsensusKey(key);
+        // --- Answer Key Analysis Mode with Caching ---
+        let keyToUse: string[];
+
+        if (consensusKey) {
+            setProgress(prev => ({ ...prev, message: 'Mevcut cevap anahtarı kullanılıyor...' }));
+            keyToUse = consensusKey;
+        } else {
+            setProgress(prev => ({ ...prev, message: 'Cevap anahtarı analiz ediliyor...' }));
+            const answerKeyBase64 = await fileToBase64(answerKeyFile.file);
+            const newKey = await analyzeAnswerKey(answerKeyBase64, answerKeyFile.file.type, questionCount);
+            setConsensusKey(newKey);
+            keyToUse = newKey;
+        }
 
         const results: AnalyzedResult[] = [];
         for (const [index, file] of files.entries()) {
           setProgress(prev => ({ ...prev, current: index + 1, message: `Öğrenci kağıdı ${index + 1} işleniyor...`}));
           const studentPaperBase64 = await fileToBase64(file.file);
-          const resultData = await analyzeStudentPaper(studentPaperBase64, file.file.type, questionCount, key);
+          const resultData = await analyzeStudentPaper(studentPaperBase64, file.file.type, questionCount, keyToUse);
           const resultsWithIds = {
             ...resultData,
             id: crypto.randomUUID(),
@@ -177,7 +188,16 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col items-center p-4 sm:p-6 md:p-8">
-      <div className="w-full max-w-7xl mx-auto">
+      <div className="w-full max-w-7xl mx-auto relative">
+        <button
+            onClick={() => setIsHelpModalOpen(true)}
+            className="absolute top-0 right-0 z-10 flex items-center gap-2 px-3 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-300 rounded-lg hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-sky-500 transition-colors"
+            aria-label="Yardım menüsünü aç"
+        >
+            <QuestionMarkCircleIcon className="w-5 h-5" />
+            <span>Yardım</span>
+        </button>
+        
         <Header />
         <main className="mt-8">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -242,7 +262,7 @@ const App: React.FC = () => {
                 />
                </div>
             </div>
-            <div className="bg-white p-6 rounded-2xl shadow-md border border-slate-200 min-h-[500px] flex flex-col lg:col-span-2">
+            <div className="bg-white p-6 rounded-2xl shadow-md border border-slate-200 min-h-[500px] flex flex-col lg:col-span-2 resize-y overflow-auto">
               <h2 className="text-xl font-semibold text-slate-700 mb-4 border-b pb-3">Analiz Sonuçları</h2>
               {consensusKey && <AnswerKeyDisplay answerKey={consensusKey} />}
               <ResultsDisplay
@@ -258,6 +278,7 @@ const App: React.FC = () => {
           </div>
         </main>
       </div>
+      <HelpModal isOpen={isHelpModalOpen} onClose={() => setIsHelpModalOpen(false)} />
     </div>
   );
 };

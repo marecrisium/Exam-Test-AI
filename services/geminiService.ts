@@ -9,6 +9,29 @@ if (!API_KEY) {
 
 const ai = new GoogleGenAI({ apiKey: API_KEY });
 
+export const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
+
+const isRateLimitError = (error: unknown): boolean => {
+    if (error instanceof Error) {
+        const message = error.message.toLowerCase();
+        return message.includes('429') || message.includes('resource_exhausted') || message.includes('quota');
+    }
+    return false;
+};
+
+
+const handleGeminiError = (error: unknown): Error => {
+    console.error("Error analyzing image with Gemini:", error);
+    if (isRateLimitError(error)) {
+        return new Error("API kullanım kotası aşıldı. Lütfen bir dakika bekleyip tekrar deneyin. Çok sayıda kağıt analiz ediyorsanız bu beklenen bir durumdur.");
+    }
+     if (error instanceof Error && error.message.includes('API key not valid')) {
+        return new Error("Yapılandırılmış API anahtarı geçersiz. Lütfen yapılandırmanızı kontrol edin.");
+    }
+    return new Error("Görüntü analiz edilemedi. İçerik okunamıyor olabilir veya hizmet kullanılamıyor olabilir.");
+};
+
+
 // --- Schemas ---
 
 const studentDataExtractionSchema = {
@@ -65,41 +88,76 @@ const standardAnalysisSchema = (questionCount: number) => ({
 
 // --- Helper Functions ---
 
-const runGeminiRequest = (parts: Part[], schema: object) => {
-    return ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: { parts: parts },
-        config: {
-            responseMimeType: "application/json",
-            responseSchema: schema,
+const runGeminiRequest = async (parts: Part[], schema: object, model: 'gemini-flash-latest' | 'gemini-flash-lite-latest' | 'gemini-2.5-pro') => {
+    const MAX_RETRIES = 3;
+    const INITIAL_DELAY_MS = 1000;
+
+    for (let i = 0; i < MAX_RETRIES; i++) {
+        try {
+            return await ai.models.generateContent({
+                model: model,
+                contents: { parts: parts },
+                config: {
+                    responseMimeType: "application/json",
+                    responseSchema: schema,
+                }
+            });
+        } catch (error) {
+            if (isRateLimitError(error) && i < MAX_RETRIES - 1) {
+                const delayMs = INITIAL_DELAY_MS * Math.pow(2, i) + Math.random() * 1000;
+                console.warn(`Rate limit hatası alındı. ${Math.round(delayMs / 1000)} saniye sonra yeniden denenecek... (${i + 1}/${MAX_RETRIES})`);
+                await delay(delayMs);
+            } else {
+                throw handleGeminiError(error);
+            }
         }
-    });
+    }
+    // This part should not be reachable if the loop logic is correct, but TypeScript needs it.
+    throw new Error("Tüm yeniden denemelere rağmen API isteği başarısız oldu.");
 };
 
 const getConsensus = <T>(items: (T | undefined)[], requiredLength: number): T => {
-    if (items.some(item => !item || (Array.isArray(item) && item.length !== requiredLength))) {
+    // For arrays, we check the length. For objects, we just check for existence.
+    const validItems = items.filter(item => {
+        if (!item) return false;
+        if (Array.isArray(item)) {
+            return item.length === requiredLength;
+        }
+        return true; // It's a valid object if it exists
+    });
+
+    if (validItems.length === 0) {
         throw new Error("Bir veya daha fazla analiz denemesi başarısız oldu veya beklenenden farklı sayıda sonuç döndürdü.");
     }
+    
+    const firstValidItem = validItems[0];
 
-    if (Array.isArray(items[0])) {
+    if (Array.isArray(firstValidItem)) {
         const consensusArray: any[] = [];
         for (let i = 0; i < requiredLength; i++) {
             const voteMap: { [key: string]: number } = {};
-            for (const item of items as any[][]) {
-                const vote = item[i];
-                if (vote) voteMap[vote] = (voteMap[vote] || 0) + 1;
+            for (const item of validItems as any[][]) {
+                 const vote = item ? item[i] : undefined;
+                 if (vote !== undefined && vote !== null) {
+                    const voteStr = String(vote);
+                    voteMap[voteStr] = (voteMap[voteStr] || 0) + 1;
+                }
             }
-            const majorityVote = Object.keys(voteMap).reduce((a, b) => voteMap[a] > voteMap[b] ? a : b, '');
-            consensusArray.push(majorityVote || 'OKUNAMADI');
+            const majorityVote = Object.keys(voteMap).length > 0
+                ? Object.keys(voteMap).reduce((a, b) => voteMap[a] > voteMap[b] ? a : b)
+                : 'OKUNAMADI';
+            consensusArray.push(majorityVote);
         }
         return consensusArray as T;
     } else {
          const voteMap: { [key: string]: number } = {};
-         for (const item of items as any[]) {
+         for (const item of validItems as any[]) {
             const vote = JSON.stringify(item);
             if (vote) voteMap[vote] = (voteMap[vote] || 0) + 1;
          }
-         const majorityVote = Object.keys(voteMap).reduce((a, b) => voteMap[a] > voteMap[b] ? a : b, '{}');
+         const majorityVote = Object.keys(voteMap).length > 0
+            ? Object.keys(voteMap).reduce((a, b) => voteMap[a] > voteMap[b] ? a : b)
+            : '{}';
          return JSON.parse(majorityVote) as T;
     }
 };
@@ -107,17 +165,20 @@ const getConsensus = <T>(items: (T | undefined)[], requiredLength: number): T =>
 
 // --- Main Service Functions ---
 
-export const analyzeAnswerKey = async (answerKeyBase64: string, questionCount: number): Promise<string[]> => {
-    console.log("Starting robust answer key analysis...");
-    const answerKeyImagePart: Part = { inlineData: { data: answerKeyBase64, mimeType: 'image/jpeg' } };
+export const analyzeAnswerKey = async (answerKeyBase64: string, mimeType: string, questionCount: number): Promise<string[]> => {
+    console.log("Starting robust answer key analysis with Pro model...");
+    const answerKeyImagePart: Part = { inlineData: { data: answerKeyBase64, mimeType: mimeType } };
     const answerKeyPrompt = `Cevap anahtarı görüntüsünü analiz et. Tam olarak ${questionCount} adet cevabı çıkar. Cevapları sırayla, soldan sağa ve satır satır çıkar.`;
     
-    const results: GenerateContentResponse[] = [];
-    const NUM_RUNS = 3; // Reduced from 10 parallel to 3 sequential runs to avoid rate limiting.
-    for (let i = 0; i < NUM_RUNS; i++) {
-        const result = await runGeminiRequest([{ text: answerKeyPrompt }, answerKeyImagePart], answerKeyExtractionSchema(questionCount));
-        results.push(result);
-    }
+    const analysisPromises = Array(2).fill(null).map(() => 
+        runGeminiRequest(
+            [{ text: answerKeyPrompt }, answerKeyImagePart], 
+            answerKeyExtractionSchema(questionCount),
+            'gemini-2.5-pro'
+        )
+    );
+    
+    const results = await Promise.all(analysisPromises);
     
     const allAnswerSets = results.map(res => {
         try { return JSON.parse(res.text.trim()).answers; } 
@@ -138,28 +199,42 @@ export const analyzeStudentPaper = async (
 ): Promise<ExamData> => {
     console.log("Starting robust student paper analysis...");
     const studentPaperImagePart: Part = { inlineData: { data: studentPaperBase64, mimeType: mimeType } };
-    const NUM_RUNS = 3;
 
-    // 1. Extract student data (3 sequential runs for consensus)
-    const dataPrompt = `Öğrencinin tam adını (Öğrenci Adı), öğrenci numarasını (Öğrenci Numarası) ve ders adını (Dersin Adı) çıkar.`;
-    const dataResults: GenerateContentResponse[] = [];
-    for (let i = 0; i < NUM_RUNS; i++) {
-        const result = await runGeminiRequest([{ text: dataPrompt }, studentPaperImagePart], studentDataExtractionSchema);
-        dataResults.push(result);
+    // 1. Extract student data (single run)
+    const dataPrompt = `Öğrencinin tam adını (Öğrenci Adı), öğrenci numarasını (Öğrenci Numarası) ve ders adını (Dersin Adı) çıkar. Eğer herhangi bir bilgi okunamıyorsa veya mevcut değilse, o alanı boş bırak ("").`;
+    const dataResult = await runGeminiRequest(
+        [{ text: dataPrompt }, studentPaperImagePart],
+        studentDataExtractionSchema,
+        'gemini-flash-lite-latest'
+    );
+    
+    let studentData: Partial<ExamData> = {};
+    try {
+        studentData = JSON.parse(dataResult.text.trim());
+    } catch(e) {
+        console.error("Failed to parse student data JSON:", dataResult.text);
+        throw new Error("Öğrenci verileri analiz edilemedi. Modelden gelen yanıt JSON formatında değil.");
     }
-    const allDataSets = dataResults.map(res => {
-        try { return JSON.parse(res.text.trim()); } 
-        catch { return undefined; }
+    
+    const unreadablePlaceholders = ["OKUNAMADI", "N/A", "YOK", "BOŞ", "BELİRTİLMEMİŞ"];
+    Object.keys(studentData).forEach(key => {
+        const value = studentData[key as keyof typeof studentData];
+        if (typeof value === 'string' && (value.trim() === '' || unreadablePlaceholders.some(p => value.toUpperCase().includes(p)))) {
+            (studentData as any)[key] = '';
+        }
     });
-    const consensusStudentData = getConsensus<{ studentName: string, studentNumber: string, subject: string }>(allDataSets, 3);
 
-    // 2. Extract student answers (3 sequential runs for consensus)
+    // 2. Extract student answers (2 parallel runs for consensus)
     const answersPrompt = `Öğrencinin Puan Tablosu'ndan tam olarak ${questionCount} adet cevabını çıkar. Cevapları sırayla, soldan sağa ve satır satır çıkar.`;
-    const answersResults: GenerateContentResponse[] = [];
-    for (let i = 0; i < NUM_RUNS; i++) {
-        const result = await runGeminiRequest([{ text: answersPrompt }, studentPaperImagePart], studentAnswersSchema(questionCount));
-        answersResults.push(result);
-    }
+    const answersPromises = Array(2).fill(null).map(() => 
+        runGeminiRequest(
+            [{ text: answersPrompt }, studentPaperImagePart], 
+            studentAnswersSchema(questionCount),
+            'gemini-flash-lite-latest'
+        )
+    );
+    const answersResults = await Promise.all(answersPromises);
+
     const allAnswerSets = answersResults.map(res => {
         try { return JSON.parse(res.text.trim()).answers; } 
         catch { return undefined; }
@@ -168,7 +243,7 @@ export const analyzeStudentPaper = async (
     console.log("Consensus student answers created:", consensusStudentAnswers);
 
     // 3. Score deterministically in code
-    const pointsPerQuestion = 100 / questionCount;
+    const pointsPerQuestion = Number((100 / questionCount).toFixed(2));
     const calculatedScores: number[] = [];
     for (let i = 0; i < questionCount; i++) {
         if (consensusStudentAnswers[i] && consensusKey[i] && consensusStudentAnswers[i].trim().toUpperCase() === consensusKey[i].trim().toUpperCase()) {
@@ -179,7 +254,9 @@ export const analyzeStudentPaper = async (
     }
 
     return {
-        ...consensusStudentData,
+        studentName: studentData.studentName || '',
+        studentNumber: studentData.studentNumber || '',
+        subject: studentData.subject || '',
         scores: calculatedScores,
     };
 };
@@ -189,25 +266,35 @@ export const extractStudentData = async (
     mimeType: string, 
     questionCount: number
 ): Promise<ExamData[]> => {
-    try {
-        const imagePart: Part = { inlineData: { data: base64Image, mimeType: mimeType } };
-        const promptText = `Sınav kağıdı görüntüsünü analiz et. Öğrencinin tam adını (Öğrenci Adı), öğrenci numarasını (Öğrenci Numarası), ders adını (Dersin Adı) ve Puan Tablosu'ndan tam olarak ${questionCount} adet sayısal notu çıkar. Notları satır satır, soldan sağa çıkar.`;
-        
-        const response = await runGeminiRequest([{ text: promptText }, imagePart], standardAnalysisSchema(questionCount));
-        
-        const jsonText = response.text.trim();
-        const parsedData = JSON.parse(jsonText);
+    const imagePart: Part = { inlineData: { data: base64Image, mimeType: mimeType } };
+    const promptText = `Sınav kağıdı görüntüsünü analiz et. Öğrencinin tam adını (Öğrenci Adı), öğrenci numarasını (Öğrenci Numarası), ders adını (Dersin Adı) ve Puan Tablosu'ndan tam olarak ${questionCount} adet sayısal notu çıkar. Notları satır satır, soldan sağa çıkar. Eğer herhangi bir metin bilgisi (isim, numara, ders) okunamıyorsa, o alanı boş bırak ("").`;
+    
+    const response = await runGeminiRequest(
+        [{ text: promptText }, imagePart], 
+        standardAnalysisSchema(questionCount),
+        'gemini-flash-lite-latest'
+    );
+    
+    const jsonText = response.text.trim();
+    const parsedData = JSON.parse(jsonText);
 
-        if (!Array.isArray(parsedData)) {
-            throw new Error("Gemini returned data in an unexpected format.");
-        }
-        return parsedData as ExamData[];
-
-    } catch (error) {
-        console.error("Error analyzing image with Gemini:", error);
-        if (error instanceof Error && error.message.includes('API key not valid')) {
-            throw new Error("The configured API key is invalid. Please check your configuration.");
-        }
-        throw new Error("Failed to analyze the image. The content may not be readable or the service may be unavailable.");
+    if (!Array.isArray(parsedData)) {
+        throw new Error("Gemini returned data in an unexpected format.");
     }
+    
+    const unreadablePlaceholders = ["OKUNAMADI", "N/A", "YOK", "BOŞ", "BELİRTİLMEMİŞ"];
+    const cleanedData = parsedData.map(item => {
+        const cleanedItem = { ...item };
+        Object.keys(cleanedItem).forEach(key => {
+            if (key === 'studentName' || key === 'studentNumber' || key === 'subject') {
+                 const value = (cleanedItem as any)[key];
+                 if (typeof value === 'string' && (value.trim() === '' || unreadablePlaceholders.some(p => value.toUpperCase().includes(p)))) {
+                    (cleanedItem as any)[key] = '';
+                 }
+            }
+        });
+        return cleanedItem;
+    });
+
+    return cleanedData as ExamData[];
 };

@@ -78,7 +78,7 @@ export const ResultsDisplay: React.FC<ResultsDisplayProps> = ({ results, isLoadi
                 case 'studentName': return item.studentName;
                 case 'studentNumber': return item.studentNumber;
                 case 'subject': return item.subject;
-                case 'totalScore': return item.scores.reduce((sum, score) => sum + score, 0);
+                case 'totalScore': return Number(item.scores.reduce((sum, score) => sum + score, 0).toFixed(2));
                 default: return '';
             }
         });
@@ -233,7 +233,7 @@ export const ResultsDisplay: React.FC<ResultsDisplayProps> = ({ results, isLoadi
                                   case 'studentName': content = item.studentName; break;
                                   case 'studentNumber': content = item.studentNumber; break;
                                   case 'subject': content = item.subject; break;
-                                  case 'totalScore': content = item.scores.reduce((sum, score) => sum + score, 0); break;
+                                  case 'totalScore': content = Number(item.scores.reduce((sum, score) => sum + score, 0).toFixed(2)); break;
                                 }
                                 return <td key={key} className="px-4 py-3 font-medium">{content}</td>;
                             })}
