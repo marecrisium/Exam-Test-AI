@@ -1,4 +1,3 @@
-
 import React, { useState, useCallback, useEffect } from 'react';
 import { analyzeAnswerKey, analyzeStudentPaper, extractStudentData } from './services/geminiService';
 import type { ExamData } from './types';
@@ -9,7 +8,7 @@ import { Header } from './components/Header';
 import { AnalyzeButton } from './components/AnalyzeButton';
 import { AnswerKeyDropzone } from './components/AnswerKeyDropzone';
 import { AnswerKeyDisplay } from './components/AnswerKeyDisplay';
-import { HelpModal } from './components/HelpModal';
+import { HelpPanel } from './components/HelpPanel';
 import { QuestionMarkCircleIcon } from './components/icons';
 
 interface UploadedFile {
@@ -31,7 +30,7 @@ const App: React.FC = () => {
   const [questionCount, setQuestionCount] = useState<number>(25);
   const [consensusKey, setConsensusKey] = useState<string[] | null>(null);
   const [progress, setProgress] = useState({ current: 0, total: 0, message: '' });
-  const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
+  const [isHelpPanelOpen, setIsHelpPanelOpen] = useState(false);
 
   useEffect(() => {
     if (!isAnswerKeyAnalysis) {
@@ -39,6 +38,34 @@ const App: React.FC = () => {
       setAnswerKeyFile(null);
     }
   }, [isAnswerKeyAnalysis]);
+
+  useEffect(() => {
+    const reAnalyzeAnswerKey = async () => {
+        // Only re-analyze if we are in the correct mode, have a file, and a key already exists.
+        if (isAnswerKeyAnalysis && answerKeyFile && consensusKey) {
+            // Check if the existing key's length matches the new question count. If not, re-run.
+            if (consensusKey.length !== questionCount) {
+                console.log(`Soru sayısı değişti. Cevap anahtarı ${questionCount} soru için yeniden analiz ediliyor...`);
+                setIsLoading(true);
+                setProgress(prev => ({ ...prev, message: 'Soru sayısı değişti, cevap anahtarı yeniden analiz ediliyor...' }));
+                try {
+                    const answerKeyBase64 = await fileToBase64(answerKeyFile.file);
+                    const newKey = await analyzeAnswerKey(answerKeyBase64, answerKeyFile.file.type, questionCount);
+                    setConsensusKey(newKey);
+                } catch (err) {
+                     setError(err instanceof Error ? err.message : 'Cevap anahtarı yeniden analiz edilirken bir hata oluştu.');
+                     setConsensusKey(null); // Clear the old key on error
+                } finally {
+                    setIsLoading(false);
+                    setProgress({ current: 0, total: 0, message: '' });
+                }
+            }
+        }
+    };
+    
+    reAnalyzeAnswerKey();
+  }, [questionCount, isAnswerKeyAnalysis, answerKeyFile, consensusKey]);
+
 
   const handleFileSelect = useCallback((selectedFiles: File[]) => {
     const newFiles = selectedFiles.map(file => ({
@@ -116,7 +143,7 @@ const App: React.FC = () => {
         // --- Answer Key Analysis Mode with Caching ---
         let keyToUse: string[];
 
-        if (consensusKey) {
+        if (consensusKey && consensusKey.length === questionCount) {
             setProgress(prev => ({ ...prev, message: 'Mevcut cevap anahtarı kullanılıyor...' }));
             keyToUse = consensusKey;
         } else {
@@ -188,19 +215,10 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col items-center p-4 sm:p-6 md:p-8">
-      <div className="w-full max-w-7xl mx-auto relative">
-        <button
-            onClick={() => setIsHelpModalOpen(true)}
-            className="absolute top-0 right-0 z-10 flex items-center gap-2 px-3 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-300 rounded-lg hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-sky-500 transition-colors"
-            aria-label="Yardım menüsünü aç"
-        >
-            <QuestionMarkCircleIcon className="w-5 h-5" />
-            <span>Yardım</span>
-        </button>
-        
+      <div className="w-full max-w-screen-2xl mx-auto">
         <Header />
         <main className="mt-8">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
             <div className="flex flex-col space-y-4 lg:col-span-1">
               <Dropzone onFileSelect={handleFileSelect} />
               {files.length > 0 && (
@@ -262,7 +280,7 @@ const App: React.FC = () => {
                 />
                </div>
             </div>
-            <div className="bg-white p-6 rounded-2xl shadow-md border border-slate-200 min-h-[500px] flex flex-col lg:col-span-2 resize-y overflow-auto">
+            <div className="bg-white p-6 rounded-2xl shadow-md border border-slate-200 min-h-[calc(100vh-280px)] flex flex-col lg:col-span-3 overflow-auto">
               <h2 className="text-xl font-semibold text-slate-700 mb-4 border-b pb-3">Analiz Sonuçları</h2>
               {consensusKey && <AnswerKeyDisplay answerKey={consensusKey} />}
               <ResultsDisplay
@@ -278,7 +296,14 @@ const App: React.FC = () => {
           </div>
         </main>
       </div>
-      <HelpModal isOpen={isHelpModalOpen} onClose={() => setIsHelpModalOpen(false)} />
+      <button
+        onClick={() => setIsHelpPanelOpen(true)}
+        className="fixed bottom-6 right-6 bg-sky-600 text-white p-3 rounded-full shadow-lg hover:bg-sky-700 transition-transform transform hover:scale-110 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-sky-500"
+        aria-label="Yardımı aç"
+      >
+        <QuestionMarkCircleIcon className="w-8 h-8" />
+      </button>
+      <HelpPanel isOpen={isHelpPanelOpen} onClose={() => setIsHelpPanelOpen(false)} />
     </div>
   );
 };
