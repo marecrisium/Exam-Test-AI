@@ -4,4 +4,5 @@ export interface ExamData {
   studentNumber: string;
   subject: string;
   scores: number[];
+  answers?: string[];
 }

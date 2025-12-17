@@ -1,8 +1,7 @@
-
 import React, { useState, useMemo } from 'react';
 import { utils, writeFile } from 'xlsx';
 import type { AnalyzedResult } from '../App';
-import { DownloadIcon, CheckIcon, LoadingSpinnerIcon } from './icons';
+import { DownloadIcon, CheckIcon, LoadingSpinnerIcon, PencilIcon } from './icons';
 
 interface ResultsDisplayProps {
   results: AnalyzedResult[];
@@ -11,6 +10,7 @@ interface ResultsDisplayProps {
   selectedIds: Set<string>;
   onSelectionChange: (id: string) => void;
   onSelectAll: (select: boolean) => void;
+  onEdit: (id: string) => void;
   progress: { current: number; total: number; message: string };
 }
 
@@ -27,7 +27,7 @@ type ScoresColumnConfig = {
 };
 
 
-export const ResultsDisplay: React.FC<ResultsDisplayProps> = ({ results, isLoading, error, selectedIds, onSelectionChange, onSelectAll, progress }) => {
+export const ResultsDisplay: React.FC<ResultsDisplayProps> = ({ results, isLoading, error, selectedIds, onSelectionChange, onSelectAll, onEdit, progress }) => {
   const [isCopied, setIsCopied] = useState(false);
   
   const [staticColumns, setStaticColumns] = useState<StaticColumnConfig>({
@@ -47,15 +47,33 @@ export const ResultsDisplay: React.FC<ResultsDisplayProps> = ({ results, isLoadi
     return Math.max(0, ...results.map(r => r.scores.length));
   }, [results]);
 
+  // FIX: Use a type-safe update for static columns to prevent type errors.
   const handleStaticColumnChange = (key: string, field: 'label' | 'selected', value: string | boolean) => {
-    setStaticColumns(prev => ({
-        ...prev,
-        [key]: { ...prev[key], [field]: value },
-    }));
+    setStaticColumns(prev => {
+        const newConfig = { ...prev[key] };
+        if (field === 'label' && typeof value === 'string') {
+            newConfig.label = value;
+        } else if (field === 'selected' && typeof value === 'boolean') {
+            newConfig.selected = value;
+        }
+        return {
+            ...prev,
+            [key]: newConfig,
+        };
+    });
   };
   
+  // FIX: Use a type-safe update for scores column to prevent type errors.
   const handleScoresColumnChange = (field: 'label' | 'selected', value: string | boolean) => {
-      setScoresColumn(prev => ({ ...prev, [field]: value }));
+      setScoresColumn(prev => {
+          const newConfig = { ...prev };
+          if (field === 'label' && typeof value === 'string') {
+            newConfig.label = value;
+          } else if (field === 'selected' && typeof value === 'boolean') {
+            newConfig.selected = value;
+          }
+          return newConfig;
+      });
   };
   
   const handleExport = () => {
@@ -63,9 +81,10 @@ export const ResultsDisplay: React.FC<ResultsDisplayProps> = ({ results, isLoadi
 
     const selectedResults = results.filter(r => selectedIds.has(r.id));
     
-    const activeStaticColumns = Object.entries(staticColumns).filter(([, config]) => config.selected);
+    // FIX: Replaced Object.entries with Object.keys to ensure proper type inference for config properties.
+    const activeStaticColumnKeys = Object.keys(staticColumns).filter((key) => staticColumns[key].selected);
     
-    let headers = activeStaticColumns.map(([, config]) => config.label);
+    let headers = activeStaticColumnKeys.map((key) => staticColumns[key].label);
     if (scoresColumn.selected) {
         for (let i = 0; i < maxScores; i++) {
             headers.push(`${scoresColumn.label} ${i + 1}`);
@@ -73,7 +92,8 @@ export const ResultsDisplay: React.FC<ResultsDisplayProps> = ({ results, isLoadi
     }
     
     const data = selectedResults.map(item => {
-        const row: (string | number)[] = activeStaticColumns.map(([key]) => {
+        // FIX: Use activeStaticColumnKeys from above.
+        const row: (string | number)[] = activeStaticColumnKeys.map((key) => {
             switch (key) {
                 case 'studentName': return item.studentName;
                 case 'studentNumber': return item.studentNumber;
@@ -138,7 +158,8 @@ export const ResultsDisplay: React.FC<ResultsDisplayProps> = ({ results, isLoadi
     );
   }
   
-  const staticColumnEntries = Object.entries(staticColumns);
+  // FIX: Use Object.keys to avoid issues with Object.entries typing.
+  const staticColumnKeys = Object.keys(staticColumns);
 
   return (
     <div className="flex flex-col flex-grow">
@@ -147,7 +168,10 @@ export const ResultsDisplay: React.FC<ResultsDisplayProps> = ({ results, isLoadi
             <h3 className="text-md font-semibold text-slate-600">Excel Sütun Başlıkları</h3>
             <p className="text-xs text-slate-500">Dışa aktarılacak Excel dosyasındaki sütunları seçip başlıklarını düzenleyebilirsiniz.</p>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 text-sm">
-                {staticColumnEntries.map(([key, config]) => (
+                {/* FIX: Use Object.keys to avoid issues with Object.entries typing. */}
+                {staticColumnKeys.map((key) => {
+                     const config = staticColumns[key];
+                     return (
                      <div key={key}>
                         <div className="flex items-center mb-1 space-x-2">
                            <input
@@ -169,7 +193,8 @@ export const ResultsDisplay: React.FC<ResultsDisplayProps> = ({ results, isLoadi
                             className="block w-full px-2 py-1.5 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 sm:text-sm bg-white"
                         />
                     </div>
-                ))}
+                );
+                })}
                 {maxScores > 0 && (
                      <div>
                         <div className="flex items-center mb-1 space-x-2">
@@ -207,12 +232,15 @@ export const ResultsDisplay: React.FC<ResultsDisplayProps> = ({ results, isLoadi
                                 onChange={(e) => onSelectAll(e.target.checked)}
                             />
                         </th>
-                        {staticColumnEntries.map(([key, config]) => (
-                           config.selected && <th key={key} scope="col" className="px-4 py-3">{config.label}</th>
-                        ))}
+                        {/* FIX: Use Object.keys to avoid issues with Object.entries typing. */}
+                        {staticColumnKeys.map((key) => {
+                           const config = staticColumns[key];
+                           return config.selected && <th key={key} scope="col" className="px-4 py-3">{config.label}</th>;
+                        })}
                         {scoresColumn.selected && Array.from({ length: maxScores }).map((_, i) => (
                             <th key={`score-header-${i}`} scope="col" className="px-4 py-3 text-center">{`${scoresColumn.label} ${i + 1}`}</th>
                         ))}
+                        <th scope="col" className="px-4 py-3 text-center">İşlemler</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -226,7 +254,9 @@ export const ResultsDisplay: React.FC<ResultsDisplayProps> = ({ results, isLoadi
                                     onChange={() => onSelectionChange(item.id)}
                                 />
                             </td>
-                            {staticColumnEntries.map(([key, config]) => {
+                            {/* FIX: Use Object.keys to avoid issues with Object.entries typing. */}
+                            {staticColumnKeys.map((key) => {
+                                const config = staticColumns[key];
                                 if (!config.selected) return null;
                                 let content: string | number = '';
                                 switch (key) {
@@ -240,6 +270,15 @@ export const ResultsDisplay: React.FC<ResultsDisplayProps> = ({ results, isLoadi
                             {scoresColumn.selected && Array.from({ length: maxScores }).map((_, i) => (
                                 <td key={`score-cell-${i}`} className="px-4 py-3 font-mono text-center">{item.scores[i] ?? ''}</td>
                             ))}
+                            <td className="px-4 py-3 text-center">
+                                <button
+                                    onClick={() => onEdit(item.id)}
+                                    className="p-1.5 text-slate-500 hover:text-sky-600 hover:bg-sky-100 rounded-md transition-colors"
+                                    aria-label="Sonucu Düzenle"
+                                >
+                                    <PencilIcon className="w-5 h-5" />
+                                </button>
+                            </td>
                         </tr>
                     ))}
                 </tbody>
