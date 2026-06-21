@@ -1,6 +1,6 @@
 {
   "name": "Sınav Analizi",
   "description": "Upload a photo of an exam or document, and this application will use Gemini to analyze the content, extract structured data, and prepare it for easy export to spreadsheet applications.",
-  "requestFramePermissions": [],
-  "majorCapabilities": []
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

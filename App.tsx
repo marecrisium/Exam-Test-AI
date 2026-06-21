@@ -3,6 +3,7 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { analyzeAnswerKey, analyzeStudentPaper, extractStudentData } from './services/geminiService';
 import type { ExamData } from './types';
 import { Dropzone } from './components/Dropzone';
+import { CameraCapture } from './components/CameraCapture';
 import { ImagePreview } from './components/ImagePreview';
 import { ResultsDisplay } from './components/ResultsDisplay';
 import { Header } from './components/Header';
@@ -372,6 +373,7 @@ const App: React.FC = () => {
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
             <div className="flex flex-col space-y-4 lg:col-span-1">
               <Dropzone onFileSelect={handleFileSelect} />
+              <CameraCapture onPhotoCaptured={(file) => handleFileSelect([file])} isLoading={isLoading} />
               {files.length > 0 && (
                 <div className="space-y-2">
                   <div className="flex justify-between items-center px-1">

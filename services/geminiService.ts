@@ -103,7 +103,7 @@ const standardAnalysisSchema = (questionCount: number) => ({
 const runGeminiRequest = async (
     parts: Part[],
     schema: object,
-    model: 'gemini-flash-latest' | 'gemini-2.5-pro' | 'gemini-flash-lite-latest',
+    model: 'gemini-flash-latest',
     systemInstruction?: string,
     enableThinking?: boolean
 ) => {
@@ -147,41 +147,26 @@ const runGeminiRequest = async (
 // --- Main Service Functions ---
 
 export const analyzeAnswerKey = async (answerKeyBase64: string, mimeType: string, questionCount: number): Promise<string[]> => {
-    console.log(`Cevap anahtarı için ${questionCount} soruluk konsensüs analizi başlatılıyor...`);
+    console.log(`Cevap anahtarı için ${questionCount} soruluk analiz başlatılıyor (tek sorgu)...`);
     const answerKeyImagePart: Part = { inlineData: { data: answerKeyBase64, mimeType: mimeType } };
     const answerKeyPrompt = `Bu çoktan seçmeli optik test formunda işaretlenmiş veya karalanmış baloncukları analiz et. Her bir soru numarası ve buna karşılık gelen işaretli harf seçeneğini (örn: '1': 'A', '2': 'B') dikkate al. Görüntüden tam olarak ${questionCount} adet cevabı, JSON objesi yerine, sırasıyla basit bir dizi olarak çıkar.`;
     const schema = answerKeyExtractionSchema(questionCount);
     
-    const requests = Array(3).fill(0).map(() => runGeminiRequest(
+    const response = await runGeminiRequest(
         [{ text: answerKeyPrompt }, answerKeyImagePart], 
         schema,
         'gemini-flash-latest'
-    ));
+    );
 
-    const results = await Promise.allSettled(requests);
-    
-    const successfulResponses = results
-        .filter(result => result.status === 'fulfilled')
-        .map(result => JSON.parse((result as PromiseFulfilledResult<GenerateContentResponse>).value.text.trim()));
+    const result = JSON.parse(response.text.trim());
+    const answers: string[] = result.answers;
 
-    if (successfulResponses.length < 2) {
-        throw new Error("Cevap anahtarı yeterli sayıda başarılı analiz edilemedi. Lütfen resim kalitesini kontrol edin.");
-    }
-    
-    const allAnswers: string[][] = successfulResponses.map(res => res.answers).filter(ans => Array.isArray(ans) && ans.length === questionCount);
-
-    if (allAnswers.length === 0) {
-        throw new Error(`Cevap anahtarı analizinden beklenen ${questionCount} adet cevap alınamadı.`);
+    if (!Array.isArray(answers) || answers.length !== questionCount) {
+        throw new Error(`Cevap anahtarı analizinden beklenen ${questionCount} adet cevap tam olarak alınamadı.`);
     }
 
-    const consensusKey: string[] = [];
-    for (let i = 0; i < questionCount; i++) {
-        const answersForQuestionI = allAnswers.map(answerSet => answerSet[i] || '');
-        consensusKey.push(findMajority(answersForQuestionI));
-    }
-    
-    console.log("Konsensüs cevap anahtarı oluşturuldu:", consensusKey);
-    return consensusKey.map(String);
+    console.log("Cevap anahtarı oluşturuldu:", answers);
+    return answers.map(String);
 };
 
 
@@ -191,29 +176,21 @@ export const analyzeStudentPaper = async (
     questionCount: number, 
     consensusKey: string[]
 ): Promise<ExamData> => {
-    console.log("Öğrenci kağıdı için konsensüs analizi başlatılıyor...");
+    console.log("Öğrenci kağıdı için analiz başlatılıyor (tek sorgu)...");
     const studentPaperImagePart: Part = { inlineData: { data: studentPaperBase64, mimeType: mimeType } };
     const prompt = `Bu çoktan seçmeli optik test formunda işaretlenmiş veya karalanmış baloncukları analiz et. Görüntüdeki sınav kağıdını dikkatle incele. Görevin, aşağıdaki bilgileri en yüksek doğrulukla çıkarmaktır: 1. **Öğrenci Adı Soyadı**: 'Öğrenci Adı' bölümünde yazan tam isim. 2. **Öğrenci Numarası**: 'Öğrenci Numarası' bölümünde yazan numara. 3. **Ders Adı**: 'Dersin Adı' bölümünde yazan ders. 4. **Öğrenci Cevapları**: Puan tablosundan, her bir soru numarasına karşılık gelen işaretli harf seçeneğini (örn: '1': 'A', '2': 'B') dikkate alarak tam olarak ${questionCount} adet öğrenci cevabını çıkar. İşaretlemeleri analiz ederken, her bir soru için en üstteki A,B,C,D,E harflerinin sütun hizasını referans al. Her yeni soru satırında bu hizalamayı koruyarak doğru seçeneği belirle. Cevapları JSON objesi yerine, sırasıyla basit bir dizi olarak çıkar. Cevapları soldan sağa, yukarıdan aşağıya doğru sırayla al. Eğer bir bilgi okunamıyorsa, kesinlikle boş bir string ("") olarak bırak. Tahminde bulunma.`;
     const schema = studentPaperSchema(questionCount);
     const systemInstruction = "Sen, bir sınav kağıdı değerlendirme uzmanısın ve görevin verilen görselden kritik bilgileri hata yapmadan ayıklamaktır.";
 
-    const requests = Array(3).fill(0).map(() => runGeminiRequest(
+    const response = await runGeminiRequest(
         [{ text: prompt }, studentPaperImagePart],
         schema,
         'gemini-flash-latest',
         systemInstruction,
         true
-    ));
+    );
 
-    const results = await Promise.allSettled(requests);
-
-    const successfulResponses = results
-        .filter(result => result.status === 'fulfilled')
-        .map(result => JSON.parse((result as PromiseFulfilledResult<GenerateContentResponse>).value.text.trim()));
-
-    if (successfulResponses.length < 2) {
-        throw new Error("Öğrenci kağıdı yeterli sayıda başarılı analiz edilemedi. Lütfen resim kalitesini kontrol edin.");
-    }
+    const result = JSON.parse(response.text.trim());
     
     const unreadablePlaceholders = ["OKUNAMADI", "N/A", "YOK", "BOŞ", "BELİRTİLMEMİŞ", "NULL"];
     const cleanValue = (value: unknown): string => {
@@ -224,28 +201,19 @@ export const analyzeStudentPaper = async (
         return strValue;
     };
 
-    const consensusStudentName = findMajority(successfulResponses.map(res => cleanValue(res.studentName)));
-    const consensusStudentNumber = findMajority(successfulResponses.map(res => cleanValue(res.studentNumber)));
-    const consensusSubject = findMajority(successfulResponses.map(res => cleanValue(res.subject)));
-    
-    const allAnswers: string[][] = successfulResponses
-        .map(res => res.answers)
-        .filter(ans => Array.isArray(ans) && ans.length === questionCount);
+    const studentName = cleanValue(result.studentName);
+    const studentNumber = cleanValue(result.studentNumber);
+    const subject = cleanValue(result.subject);
+    const studentAnswers: string[] = (Array.isArray(result.answers) ? result.answers : []).map(String);
 
-    if (allAnswers.length === 0) {
+    if (studentAnswers.length !== questionCount) {
         throw new Error(`Öğrenci kağıdı cevapları analiz edilemedi. Beklenen ${questionCount} cevap alınamadı.`);
     }
 
-    const consensusStudentAnswers: string[] = [];
-    for (let i = 0; i < questionCount; i++) {
-        const answersForQuestionI = allAnswers.map(answerSet => answerSet[i] || '');
-        consensusStudentAnswers.push(findMajority(answersForQuestionI));
-    }
-    
     const pointsPerQuestion = Number((100 / questionCount).toFixed(2));
     const calculatedScores: number[] = [];
     for (let i = 0; i < questionCount; i++) {
-        const studentAnswer = consensusStudentAnswers[i] ? String(consensusStudentAnswers[i]).trim().toUpperCase() : '';
+        const studentAnswer = studentAnswers[i] ? studentAnswers[i].trim().toUpperCase() : '';
         const correctAnswer = consensusKey[i] ? String(consensusKey[i]).trim().toUpperCase() : '';
         if (studentAnswer && correctAnswer && studentAnswer === correctAnswer) {
             calculatedScores.push(pointsPerQuestion);
@@ -255,11 +223,11 @@ export const analyzeStudentPaper = async (
     }
 
     return {
-        studentName: consensusStudentName,
-        studentNumber: consensusStudentNumber,
-        subject: consensusSubject,
+        studentName,
+        studentNumber,
+        subject,
         scores: calculatedScores,
-        answers: consensusStudentAnswers.map(String)
+        answers: studentAnswers
     };
 };
 
@@ -268,28 +236,21 @@ export const extractStudentData = async (
     mimeType: string, 
     questionCount: number
 ): Promise<ExamData> => {
+    console.log("Öğrenci kağıdı düz analizi başlatılıyor (tek sorgu)...");
     const imagePart: Part = { inlineData: { data: base64Image, mimeType: mimeType } };
     const promptText = `Görüntüdeki sınav kağıdını dikkatle incele. Görevin, aşağıdaki bilgileri en yüksek doğrulukla çıkarmaktır: 1. **Öğrenci Adı Soyadı**: 'Öğrenci Adı' bölümünde yazan tam isim. 2. **Öğrenci Numarası**: 'Öğrenci Numarası' bölümünde yazan numara. 3. **Ders Adı**: 'Dersin Adı' bölümünde yazan ders. 4. **Puanlar**: Puan tablosundan tam olarak ${questionCount} adet sayısal puanı çıkar. Puanları soldan sağa, yukarıdan aşağıya doğru sırayla al. Eğer bir bilgi okunamıyorsa, kesinlikle boş bir string ("") olarak bırak. Tahminde bulunma.`;
     const schema = standardAnalysisSchema(questionCount);
     const systemInstruction = "Sen, bir sınav kağıdı değerlendirme uzmanısın ve görevin verilen görselden kritik bilgileri hata yapmadan ayıklamaktır.";
     
-    const requests = Array(3).fill(0).map(() => runGeminiRequest(
+    const response = await runGeminiRequest(
         [{ text: promptText }, imagePart], 
         schema,
         'gemini-flash-latest',
         systemInstruction,
         true
-    ));
+    );
 
-    const results = await Promise.allSettled(requests);
-    
-    const successfulResponses = results
-        .filter(result => result.status === 'fulfilled')
-        .map(result => JSON.parse((result as PromiseFulfilledResult<GenerateContentResponse>).value.text.trim()));
-
-    if (successfulResponses.length < 2) {
-        throw new Error("Öğrenci kağıdı yeterli sayıda başarılı analiz edilemedi. Lütfen resim kalitesini kontrol edin.");
-    }
+    const result = JSON.parse(response.text.trim());
 
     const unreadablePlaceholders = ["OKUNAMADI", "N/A", "YOK", "BOŞ", "BELİRTİLMEMİŞ", "NULL"];
     const cleanValue = (value: unknown): string => {
@@ -300,28 +261,19 @@ export const extractStudentData = async (
         return strValue;
     };
     
-    const consensusStudentName = findMajority(successfulResponses.map(res => cleanValue(res.studentName)));
-    const consensusStudentNumber = findMajority(successfulResponses.map(res => cleanValue(res.studentNumber)));
-    const consensusSubject = findMajority(successfulResponses.map(res => cleanValue(res.subject)));
-    
-    const allScores: (number | null)[][] = successfulResponses
-        .map(res => res.scores)
-        .filter(scores => Array.isArray(scores) && scores.length === questionCount);
+    const studentName = cleanValue(result.studentName);
+    const studentNumber = cleanValue(result.studentNumber);
+    const subject = cleanValue(result.subject);
+    const scores: number[] = (Array.isArray(result.scores) ? result.scores : []).map(Number);
 
-    if (allScores.length === 0) {
+    if (scores.length !== questionCount) {
         throw new Error(`Öğrenci kağıdı puanları analiz edilemedi. Beklenen ${questionCount} puan alınamadı.`);
     }
 
-    const consensusScores: number[] = [];
-    for (let i = 0; i < questionCount; i++) {
-        const scoresForQuestionI = allScores.map(scoreSet => scoreSet[i] ?? 0);
-        consensusScores.push(findMajority(scoresForQuestionI));
-    }
-
     return {
-        studentName: consensusStudentName,
-        studentNumber: consensusStudentNumber,
-        subject: consensusSubject,
-        scores: consensusScores,
+        studentName,
+        studentNumber,
+        subject,
+        scores,
     };
 };

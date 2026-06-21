@@ -65,22 +65,48 @@ export const AnswerKeyEditModal: React.FC<AnswerKeyEditModalProps> = ({ answerKe
                     {/* Form Column */}
                     <div className="flex flex-col space-y-4">
                         <h3 className="text-md font-semibold text-slate-600">Çıkarılan Cevaplar</h3>
-                        <div className="flex flex-row space-x-4 overflow-x-auto pb-2">
+                        <div className="flex flex-col md:flex-row gap-6 overflow-x-auto pb-2 max-h-[50vh] lg:max-h-none">
                             {answerChunks.map((chunk, chunkIndex) => (
-                                <div key={chunkIndex} className="flex flex-col space-y-2 shrink-0">
+                                <div key={chunkIndex} className="flex flex-col space-y-3 shrink-0 bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
                                     {chunk.map((answer, answerIndex) => {
                                         const originalIndex = chunkIndex * 10 + answerIndex;
+                                        const currentAnswer = (answer || '').trim().toUpperCase();
                                         return (
-                                            <div key={originalIndex} className="flex items-center space-x-2">
-                                                <label htmlFor={`answer-${originalIndex}`} className="w-8 shrink-0 text-right text-xs font-medium text-slate-500">{originalIndex + 1}</label>
-                                                <input
-                                                    type="text"
-                                                    id={`answer-${originalIndex}`}
-                                                    value={answer}
-                                                    onChange={(e) => handleAnswerChange(originalIndex, e.target.value)}
-                                                    maxLength={1}
-                                                    className="w-12 p-1.5 text-center font-mono bg-white border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 sm:text-sm"
-                                                />
+                                            <div key={originalIndex} className="flex items-center space-x-3 h-8">
+                                                <span className="w-6 text-right text-xs font-bold text-slate-400">
+                                                    {originalIndex + 1}.
+                                                </span>
+                                                <div className="flex items-center space-x-1.5">
+                                                    {['A', 'B', 'C', 'D', 'E'].map((opt) => {
+                                                        const isSelected = currentAnswer === opt;
+                                                        return (
+                                                            <button
+                                                                key={opt}
+                                                                type="button"
+                                                                onClick={() => handleAnswerChange(originalIndex, isSelected ? '' : opt)}
+                                                                className={`w-7 h-7 rounded-full text-xs font-bold flex items-center justify-center transition-all duration-200 border cursor-pointer ${
+                                                                    isSelected
+                                                                        ? 'bg-sky-600 text-white border-sky-600 shadow-sm scale-110'
+                                                                        : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100 hover:border-slate-400'
+                                                                }`}
+                                                            >
+                                                                {opt}
+                                                            </button>
+                                                        );
+                                                    })}
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleAnswerChange(originalIndex, '')}
+                                                        title="Temizle"
+                                                        className={`w-7 h-7 text-xs font-medium flex items-center justify-center transition-colors rounded-lg border ${
+                                                            currentAnswer === ''
+                                                                ? 'bg-amber-50 text-amber-700 border-amber-200'
+                                                                : 'bg-white text-slate-400 border-slate-200 hover:bg-slate-50 hover:text-slate-600'
+                                                        }`}
+                                                    >
+                                                        Boş
+                                                    </button>
+                                                </div>
                                             </div>
                                         );
                                     })}
