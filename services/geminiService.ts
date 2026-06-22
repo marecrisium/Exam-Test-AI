@@ -174,7 +174,8 @@ export const analyzeStudentPaper = async (
     studentPaperBase64: string, 
     mimeType: string, 
     questionCount: number, 
-    consensusKey: string[]
+    consensusKey: string[],
+    pointsPerQuestionParam?: number
 ): Promise<ExamData> => {
     console.log("Öğrenci kağıdı için analiz başlatılıyor (tek sorgu)...");
     const studentPaperImagePart: Part = { inlineData: { data: studentPaperBase64, mimeType: mimeType } };
@@ -210,7 +211,7 @@ export const analyzeStudentPaper = async (
         throw new Error(`Öğrenci kağıdı cevapları analiz edilemedi. Beklenen ${questionCount} cevap alınamadı.`);
     }
 
-    const pointsPerQuestion = Number((100 / questionCount).toFixed(2));
+    const pointsPerQuestion = pointsPerQuestionParam !== undefined ? pointsPerQuestionParam : Number((100 / questionCount).toFixed(2));
     const calculatedScores: number[] = [];
     for (let i = 0; i < questionCount; i++) {
         const studentAnswer = studentAnswers[i] ? studentAnswers[i].trim().toUpperCase() : '';

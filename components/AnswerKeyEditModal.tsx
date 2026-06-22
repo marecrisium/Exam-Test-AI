@@ -38,7 +38,7 @@ export const AnswerKeyEditModal: React.FC<AnswerKeyEditModalProps> = ({ answerKe
             role="dialog"
             aria-modal="true"
         >
-            <div className="bg-slate-50 rounded-2xl shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+            <div className="bg-slate-50 rounded-2xl shadow-xl w-full max-w-screen-2xl max-h-[90vh] flex flex-col">
                 <div className="flex items-center justify-between p-4 border-b border-slate-200 bg-white rounded-t-2xl sticky top-0">
                     <h2 id="edit-ak-modal-title" className="text-lg font-semibold text-slate-800">Cevap Anahtarını Düzenle</h2>
                     <button

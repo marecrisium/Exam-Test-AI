@@ -3,7 +3,6 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { analyzeAnswerKey, analyzeStudentPaper, extractStudentData } from './services/geminiService';
 import type { ExamData } from './types';
 import { Dropzone } from './components/Dropzone';
-import { CameraCapture } from './components/CameraCapture';
 import { ImagePreview } from './components/ImagePreview';
 import { ResultsDisplay } from './components/ResultsDisplay';
 import { Header } from './components/Header';
@@ -33,6 +32,7 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [questionCount, setQuestionCount] = useState<number>(25);
+  const [pointsPerQuestion, setPointsPerQuestion] = useState<string>("4");
   const [consensusKey, setConsensusKey] = useState<string[] | null>(null);
   const [progress, setProgress] = useState({ current: 0, total: 0, message: '' });
   const [isHelpPanelOpen, setIsHelpPanelOpen] = useState(false);
@@ -41,6 +41,10 @@ const App: React.FC = () => {
   const [processedAnswerKeyUrl, setProcessedAnswerKeyUrl] = useState<string | null>(null);
   const [isTesting, setIsTesting] = useState(false);
 
+  useEffect(() => {
+    const defaultPoints = (100 / questionCount).toFixed(2).replace(/\.00$/, "");
+    setPointsPerQuestion(defaultPoints);
+  }, [questionCount]);
 
   useEffect(() => {
     if (!isAnswerKeyAnalysis) {
@@ -175,10 +179,11 @@ const App: React.FC = () => {
         }
 
         const results: AnalyzedResult[] = [];
+        const pts = parseFloat(pointsPerQuestion) || Number((100 / questionCount).toFixed(2));
         for (const [index, file] of files.entries()) {
           setProgress(prev => ({ ...prev, current: index + 1, message: `Öğrenci kağıdı ${index + 1} işleniyor...`}));
           const { base64: studentPaperBase64, dataUrl: processedImageUrl } = await fileToBase64(file.file);
-          const resultData = await analyzeStudentPaper(studentPaperBase64, file.file.type, questionCount, keyToUse);
+          const resultData = await analyzeStudentPaper(studentPaperBase64, file.file.type, questionCount, keyToUse, pts);
           const resultsWithIds = {
             ...resultData,
             id: crypto.randomUUID(),
@@ -289,7 +294,8 @@ const App: React.FC = () => {
               }));
               
               const { base64: spBase64, dataUrl: spDataUrl } = await fileToBase64(file.file);
-              const resultData = await analyzeStudentPaper(spBase64, file.file.type, TEST_QUESTION_COUNT, newKey);
+              const pts = parseFloat(pointsPerQuestion) || Number((100 / TEST_QUESTION_COUNT).toFixed(2));
+              const resultData = await analyzeStudentPaper(spBase64, file.file.type, TEST_QUESTION_COUNT, newKey, pts);
               
               results.push({
                   ...resultData,
@@ -342,12 +348,12 @@ const App: React.FC = () => {
     let resultToSave = updatedResult;
 
     if (isAnswerKeyAnalysis && consensusKey && resultToSave.answers) {
-        const pointsPerQuestion = Number((100 / consensusKey.length).toFixed(2));
+        const pts = parseFloat(pointsPerQuestion) || Number((100 / consensusKey.length).toFixed(2));
         const newScores = resultToSave.answers.map((studentAnswer, i) => {
             const correctAnswer = consensusKey[i] ? String(consensusKey[i]).trim().toUpperCase() : '';
             const trimmedStudentAnswer = studentAnswer ? String(studentAnswer).trim().toUpperCase() : '';
             if (trimmedStudentAnswer && correctAnswer && trimmedStudentAnswer === correctAnswer) {
-                return pointsPerQuestion;
+                return pts;
             }
             return 0;
         });
@@ -373,7 +379,6 @@ const App: React.FC = () => {
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
             <div className="flex flex-col space-y-4 lg:col-span-1">
               <Dropzone onFileSelect={handleFileSelect} />
-              <CameraCapture onPhotoCaptured={(file) => handleFileSelect([file])} isLoading={isLoading} />
               {files.length > 0 && (
                 <div className="space-y-2">
                   <div className="flex justify-between items-center px-1">
@@ -403,6 +408,20 @@ const App: React.FC = () => {
                         <option key={num} value={num}>{num}</option>
                     ))}
                     </select>
+                </div>
+                <div className="space-y-2">
+                    <label htmlFor="points-per-question" className="block text-sm font-medium text-slate-700">
+                    Doğru Cevap Puanı
+                    </label>
+                    <input
+                      type="text"
+                      id="points-per-question"
+                      value={pointsPerQuestion}
+                      onChange={(e) => setPointsPerQuestion(e.target.value)}
+                      disabled={isLoading}
+                      placeholder="Örn: 4"
+                      className="block w-full px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 sm:text-sm disabled:bg-slate-50"
+                    />
                 </div>
                 <div className="space-y-3">
                     <div className="flex items-center space-x-2">

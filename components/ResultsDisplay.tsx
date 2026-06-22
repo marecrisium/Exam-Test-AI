@@ -47,6 +47,28 @@ export const ResultsDisplay: React.FC<ResultsDisplayProps> = ({ results, isLoadi
     return Math.max(0, ...results.map(r => r.scores.length));
   }, [results]);
 
+  const stats = useMemo(() => {
+    if (!results || results.length === 0) return { mean: 0, max: 0, min: 0 };
+    const scores = results.map(r => Number(r.scores.reduce((sum, s) => sum + s, 0).toFixed(2)));
+    const sum = scores.reduce((acc, curr) => acc + curr, 0);
+    const mean = Number((sum / scores.length).toFixed(2));
+    const max = Math.max(...scores);
+    const min = Math.min(...scores);
+    return { mean, max, min };
+  }, [results]);
+
+  const { absoluteMax, absoluteMin, hasMultipleDistinct } = useMemo(() => {
+    if (!results || results.length === 0) return { absoluteMax: 0, absoluteMin: 0, hasMultipleDistinct: false };
+    const scores = results.map(r => Number(r.scores.reduce((sum, s) => sum + s, 0).toFixed(2)));
+    const maxVal = Math.max(...scores);
+    const minVal = Math.min(...scores);
+    return {
+      absoluteMax: maxVal,
+      absoluteMin: minVal,
+      hasMultipleDistinct: results.length > 1 && maxVal !== minVal
+    };
+  }, [results]);
+
   // FIX: Use a type-safe update for static columns to prevent type errors.
   const handleStaticColumnChange = (key: string, field: 'label' | 'selected', value: string | boolean) => {
     setStaticColumns(prev => {
@@ -109,8 +131,50 @@ export const ResultsDisplay: React.FC<ResultsDisplayProps> = ({ results, isLoadi
         }
         return row;
     });
+
+    // Calculate stats for exported students
+    const exportedScores = selectedResults.map(r => Number(r.scores.reduce((sum, s) => sum + s, 0).toFixed(2)));
+    const exportedSum = exportedScores.reduce((acc, curr) => acc + curr, 0);
+    const exportedMean = exportedScores.length > 0 ? Number((exportedSum / exportedScores.length).toFixed(2)) : 0;
+    const exportedMax = exportedScores.length > 0 ? Math.max(...exportedScores) : 0;
+    const exportedMin = exportedScores.length > 0 ? Math.min(...exportedScores) : 0;
+
+    const totalScoreIndex = activeStaticColumnKeys.indexOf('totalScore');
+
+    const emptyRow: string[] = [];
+    
+    const statsRowMean = Array(headers.length).fill('');
+    statsRowMean[0] = 'Ortalama Puan';
+    if (totalScoreIndex !== -1) {
+        statsRowMean[totalScoreIndex] = exportedMean;
+    } else {
+        statsRowMean[1] = exportedMean;
+    }
+
+    const statsRowMax = Array(headers.length).fill('');
+    statsRowMax[0] = 'En Yüksek Puan';
+    if (totalScoreIndex !== -1) {
+        statsRowMax[totalScoreIndex] = exportedMax;
+    } else {
+        statsRowMax[1] = exportedMax;
+    }
+
+    const statsRowMin = Array(headers.length).fill('');
+    statsRowMin[0] = 'En Düşük Puan';
+    if (totalScoreIndex !== -1) {
+        statsRowMin[totalScoreIndex] = exportedMin;
+    } else {
+        statsRowMin[1] = exportedMin;
+    }
       
-    const worksheetData = [headers, ...data];
+    const worksheetData = [
+        headers, 
+        ...data, 
+        emptyRow, 
+        statsRowMean, 
+        statsRowMax, 
+        statsRowMin
+    ];
     const worksheet = utils.aoa_to_sheet(worksheetData);
     const workbook = utils.book_new();
     utils.book_append_sheet(workbook, worksheet, 'Sınav Sonuçları');
@@ -220,6 +284,29 @@ export const ResultsDisplay: React.FC<ResultsDisplayProps> = ({ results, isLoadi
                 )}
             </div>
         </div>
+
+        {/* Sınav İstatistikleri */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+            <div className="bg-slate-50 p-4 rounded-xl border border-slate-250 shadow-xs flex flex-col justify-center">
+                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Ortalama Puan</span>
+                <span className="text-2xl font-bold font-mono text-slate-800 mt-1">{stats.mean}</span>
+            </div>
+            <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-250/30 shadow-xs flex flex-col justify-center">
+                <div className="flex items-center space-x-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                    <span className="text-xs font-semibold text-emerald-700 uppercase tracking-wider">En Yüksek Puan</span>
+                </div>
+                <span className="text-2xl font-bold font-mono text-emerald-900 mt-1">{stats.max}</span>
+            </div>
+            <div className="bg-rose-50/50 p-4 rounded-xl border border-rose-250/30 shadow-xs flex flex-col justify-center">
+                <div className="flex items-center space-x-1.5">
+                    <span className="w-2 h-2 rounded-full bg-rose-500"></span>
+                    <span className="text-xs font-semibold text-rose-700 uppercase tracking-wider">En Düşük Puan</span>
+                </div>
+                <span className="text-2xl font-bold font-mono text-rose-900 mt-1">{stats.min}</span>
+            </div>
+        </div>
+
         <div className="relative overflow-x-auto">
             <table className="w-full text-sm text-left text-slate-600">
                 <thead className="text-xs text-slate-700 uppercase bg-slate-100 rounded-t-lg">
@@ -244,43 +331,56 @@ export const ResultsDisplay: React.FC<ResultsDisplayProps> = ({ results, isLoadi
                     </tr>
                 </thead>
                 <tbody>
-                    {results.map((item) => (
-                        <tr key={item.id} className="bg-white border-b hover:bg-slate-50">
-                            <td className="w-4 p-4">
-                                <input 
-                                    type="checkbox" 
-                                    className="w-4 h-4 text-sky-600 bg-gray-100 border-gray-300 rounded focus:ring-sky-500"
-                                    checked={selectedIds.has(item.id)}
-                                    onChange={() => onSelectionChange(item.id)}
-                                />
-                            </td>
-                            {/* FIX: Use Object.keys to avoid issues with Object.entries typing. */}
-                            {staticColumnKeys.map((key) => {
-                                const config = staticColumns[key];
-                                if (!config.selected) return null;
-                                let content: string | number = '';
-                                switch (key) {
-                                  case 'studentName': content = item.studentName; break;
-                                  case 'studentNumber': content = item.studentNumber; break;
-                                  case 'subject': content = item.subject; break;
-                                  case 'totalScore': content = Number(item.scores.reduce((sum, score) => sum + score, 0).toFixed(2)); break;
-                                }
-                                return <td key={key} className="px-4 py-3 font-medium">{content}</td>;
-                            })}
-                            {scoresColumn.selected && Array.from({ length: maxScores }).map((_, i) => (
-                                <td key={`score-cell-${i}`} className="px-4 py-3 font-mono text-center">{item.scores[i] ?? ''}</td>
-                            ))}
-                            <td className="px-4 py-3 text-center">
-                                <button
-                                    onClick={() => onEdit(item.id)}
-                                    className="p-1.5 text-slate-500 hover:text-sky-600 hover:bg-sky-100 rounded-md transition-colors"
-                                    aria-label="Sonucu Düzenle"
-                                >
-                                    <PencilIcon className="w-5 h-5" />
-                                </button>
-                            </td>
-                        </tr>
-                    ))}
+                    {results.map((item) => {
+                        const itemScore = Number(item.scores.reduce((sum, s) => sum + s, 0).toFixed(2));
+                        const isMax = hasMultipleDistinct && itemScore === absoluteMax;
+                        const isMin = hasMultipleDistinct && itemScore === absoluteMin;
+                        
+                        let rowClass = "bg-white border-b hover:bg-slate-50 transition-colors";
+                        if (isMax) {
+                            rowClass = "bg-emerald-50/70 hover:bg-emerald-100/70 border-b border-emerald-100/30 text-emerald-950 transition-colors";
+                        } else if (isMin) {
+                            rowClass = "bg-rose-50/70 hover:bg-rose-100/70 border-b border-rose-100/30 text-rose-950 transition-colors";
+                        }
+                        
+                        return (
+                            <tr key={item.id} className={rowClass}>
+                                <td className="w-4 p-4">
+                                    <input 
+                                        type="checkbox" 
+                                        className="w-4 h-4 text-sky-600 bg-gray-100 border-gray-300 rounded focus:ring-sky-500"
+                                        checked={selectedIds.has(item.id)}
+                                        onChange={() => onSelectionChange(item.id)}
+                                    />
+                                </td>
+                                {/* FIX: Use Object.keys to avoid issues with Object.entries typing. */}
+                                {staticColumnKeys.map((key) => {
+                                    const config = staticColumns[key];
+                                    if (!config.selected) return null;
+                                    let content: string | number = '';
+                                    switch (key) {
+                                      case 'studentName': content = item.studentName; break;
+                                      case 'studentNumber': content = item.studentNumber; break;
+                                      case 'subject': content = item.subject; break;
+                                      case 'totalScore': content = Number(item.scores.reduce((sum, score) => sum + score, 0).toFixed(2)); break;
+                                    }
+                                    return <td key={key} className="px-4 py-3 font-medium">{content}</td>;
+                                })}
+                                {scoresColumn.selected && Array.from({ length: maxScores }).map((_, i) => (
+                                    <td key={`score-cell-${i}`} className="px-4 py-3 font-mono text-center">{item.scores[i] ?? ''}</td>
+                                ))}
+                                <td className="px-4 py-3 text-center">
+                                    <button
+                                        onClick={() => onEdit(item.id)}
+                                        className="p-1.5 text-slate-500 hover:text-sky-600 hover:bg-sky-100 rounded-md transition-colors"
+                                        aria-label="Sonucu Düzenle"
+                                    >
+                                        <PencilIcon className="w-5 h-5" />
+                                    </button>
+                                </td>
+                            </tr>
+                        );
+                    })}
                 </tbody>
             </table>
         </div>
