@@ -1,5 +1,6 @@
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import imageCompression from 'browser-image-compression';
 import { analyzeAnswerKey, analyzeStudentPaper, extractStudentData } from './services/geminiService';
 import type { ExamData } from './types';
 import { Dropzone } from './components/Dropzone';
@@ -28,6 +29,8 @@ const App: React.FC = () => {
   const [answerKeyFile, setAnswerKeyFile] = useState<UploadedFile | null>(null);
   const [isAnswerKeyAnalysis, setIsAnswerKeyAnalysis] = useState<boolean>(false);
   const [analysisResults, setAnalysisResults] = useState<AnalyzedResult[]>([]);
+  const [isPenaltyEnabled, setIsPenaltyEnabled] = useState<boolean>(false);
+  const [penaltyRatio, setPenaltyRatio] = useState<number>(4);
   const [selectedResultIds, setSelectedResultIds] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -40,6 +43,36 @@ const App: React.FC = () => {
   const [isAnswerKeyEditing, setIsAnswerKeyEditing] = useState<boolean>(false);
   const [processedAnswerKeyUrl, setProcessedAnswerKeyUrl] = useState<string | null>(null);
   const [isTesting, setIsTesting] = useState(false);
+
+  const processedResults = useMemo(() => {
+    const pts = parseFloat(pointsPerQuestion) || Number((100 / questionCount).toFixed(2));
+    return analysisResults.map(result => {
+      if (isAnswerKeyAnalysis && consensusKey && result.answers) {
+        const computedScores = result.answers.map((studentAnswer, i) => {
+          const correctAnswer = consensusKey[i] ? String(consensusKey[i]).trim().toUpperCase() : '';
+          const trimmedStudentAnswer = studentAnswer ? String(studentAnswer).trim().toUpperCase() : '';
+          
+          if (!correctAnswer) return 0;
+          
+          if (trimmedStudentAnswer === correctAnswer) {
+            return pts;
+          } else if (trimmedStudentAnswer === '') {
+            return 0;
+          } else {
+            if (isPenaltyEnabled && penaltyRatio > 0) {
+              return -(pts / penaltyRatio);
+            }
+            return 0;
+          }
+        });
+        return {
+          ...result,
+          scores: computedScores
+        };
+      }
+      return result;
+    });
+  }, [analysisResults, isAnswerKeyAnalysis, consensusKey, pointsPerQuestion, isPenaltyEnabled, penaltyRatio, questionCount]);
 
   useEffect(() => {
     const defaultPoints = (100 / questionCount).toFixed(2).replace(/\.00$/, "");
@@ -133,7 +166,24 @@ const App: React.FC = () => {
     setProcessedAnswerKeyUrl(null);
   }, [answerKeyFile]);
 
-  const fileToBase64 = (file: File): Promise<{ base64: string; dataUrl: string; }> => {
+   const fileToBase64 = async (file: File): Promise<{ base64: string; dataUrl: string; }> => {
+    let processedFile = file;
+    if (file.type.startsWith('image/')) {
+      try {
+        console.log(`Görsel sıkıştırılıyor: ${file.name}, orijinal boyut: ${(file.size / 1024 / 1024).toFixed(2)} MB`);
+        const options = {
+          maxSizeMB: 0.8,
+          maxWidthOrHeight: 1200,
+          useWebWorker: true,
+          initialQuality: 0.85
+        };
+        processedFile = await imageCompression(file, options);
+        console.log(`Sıkıştırma tamamlandı: ${processedFile.name}, yeni boyut: ${(processedFile.size / 1024 / 1024).toFixed(2)} MB`);
+      } catch (err) {
+        console.error("Görsel sıkıştırma hatası:", err);
+      }
+    }
+
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => {
@@ -148,7 +198,7 @@ const App: React.FC = () => {
         console.error("FileReader hatası:", error);
         reject(new Error(`'${file.name}' dosyası okunamadı.`));
       };
-      reader.readAsDataURL(file);
+      reader.readAsDataURL(processedFile);
     });
   };
 
@@ -330,15 +380,15 @@ const App: React.FC = () => {
 
   const handleSelectAll = useCallback((select: boolean) => {
     if (select) {
-        const allIds = new Set(analysisResults.map(r => r.id));
+        const allIds = new Set(processedResults.map(r => r.id));
         setSelectedResultIds(allIds);
     } else {
         setSelectedResultIds(new Set());
     }
-  }, [analysisResults]);
+  }, [processedResults]);
 
   const handleEditResult = (resultId: string) => {
-    const resultToEdit = analysisResults.find(r => r.id === resultId);
+    const resultToEdit = processedResults.find(r => r.id === resultId);
     if (resultToEdit) {
       setEditingResult(resultToEdit);
     }
@@ -372,46 +422,49 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col items-center p-4 sm:p-6 md:p-8">
-      <div className="w-full max-w-screen-2xl mx-auto">
+    <div className="min-h-screen bg-[#0F172A] text-[#F8FAFC] flex flex-col items-center p-4 sm:p-6 md:p-8 font-sans">
+      <div className="w-full max-w-[1600px] mx-auto flex flex-col">
         <Header onRunTest={handleSystemTest} isTesting={isTesting} />
-        <main className="mt-8">
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-            <div className="flex flex-col space-y-4 lg:col-span-1">
+        <main className="mt-6">
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+            <aside className="flex flex-col space-y-5 lg:col-span-1">
               <Dropzone onFileSelect={handleFileSelect} />
+              
               {files.length > 0 && (
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center px-1">
-                    <h3 className="text-sm font-semibold text-slate-600">Yüklenen Öğrenci Kağıtları</h3>
-                    <span className="text-xs font-bold bg-sky-100 text-sky-700 px-2.5 py-1 rounded-full">{files.length}</span>
+                <div className="bg-[#1E293B] border border-slate-700/30 p-4 rounded-xl space-y-3">
+                  <div className="flex justify-between items-center">
+                    <h3 className="text-xs font-mono font-bold text-accent uppercase tracking-wider">Yüklenen Öğrenci Kağıtları</h3>
+                    <span className="text-xs font-mono font-bold bg-[#0F172A] text-accent px-2.5 py-0.5 rounded-md border border-slate-700">{files.length}</span>
                   </div>
-                  <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2">
+                  <div className="space-y-2 max-h-[250px] overflow-y-auto pr-2 custom-scrollbar">
                       {files.map(file => (
                           <ImagePreview key={file.id} imageUrl={file.url} fileName={file.file.name} onClear={() => handleFileClear(file.id)} />
                       ))}
                   </div>
                 </div>
               )}
-               <div className="space-y-4">
-                 <div className="space-y-2">
-                    <label htmlFor="question-count" className="block text-sm font-medium text-slate-700">
-                    Soru Sayısı
+
+              <div className="bg-[#1E293B] border border-slate-700/30 p-5 rounded-xl space-y-4">
+                <div className="font-mono text-accent text-xs mb-2 border-l-2 border-accent pl-2 uppercase tracking-widest font-bold">Parametreler</div>
+                <div className="space-y-1.5">
+                    <label htmlFor="question-count" className="block text-[10px] font-mono font-bold text-accent uppercase tracking-wider">
+                      Soru Sayısı
                     </label>
                     <select
-                    id="question-count"
-                    value={questionCount}
-                    onChange={(e) => setQuestionCount(Number(e.target.value))}
-                    disabled={isLoading}
-                    className="block w-full px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 sm:text-sm disabled:bg-slate-50"
+                      id="question-count"
+                      value={questionCount}
+                      onChange={(e) => setQuestionCount(Number(e.target.value))}
+                      disabled={isLoading}
+                      className="block w-full px-3 py-2 bg-[#0F172A] border border-slate-700 rounded-md focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent text-sm text-[#F8FAFC] disabled:bg-slate-800 disabled:text-slate-500"
                     >
-                    {Array.from({ length: 50 }, (_, i) => i + 1).map(num => (
-                        <option key={num} value={num}>{num}</option>
-                    ))}
+                      {Array.from({ length: 50 }, (_, i) => i + 1).map(num => (
+                          <option key={num} value={num}>{num}</option>
+                      ))}
                     </select>
                 </div>
-                <div className="space-y-2">
-                    <label htmlFor="points-per-question" className="block text-sm font-medium text-slate-700">
-                    Doğru Cevap Puanı
+                <div className="space-y-1.5">
+                    <label htmlFor="points-per-question" className="block text-[10px] font-mono font-bold text-accent uppercase tracking-wider">
+                      Doğru Cevap Puanı
                     </label>
                     <input
                       type="text"
@@ -420,10 +473,10 @@ const App: React.FC = () => {
                       onChange={(e) => setPointsPerQuestion(e.target.value)}
                       disabled={isLoading}
                       placeholder="Örn: 4"
-                      className="block w-full px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 sm:text-sm disabled:bg-slate-50"
+                      className="block w-full px-3 py-2 bg-[#0F172A] border border-slate-700 rounded-md focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent text-sm text-[#F8FAFC] disabled:bg-slate-800 disabled:text-slate-500"
                     />
                 </div>
-                <div className="space-y-3">
+                <div className="space-y-3 pt-1">
                     <div className="flex items-center space-x-2">
                         <input
                             type="checkbox"
@@ -431,41 +484,95 @@ const App: React.FC = () => {
                             checked={isAnswerKeyAnalysis}
                             onChange={(e) => setIsAnswerKeyAnalysis(e.target.checked)}
                             disabled={isLoading}
-                            className="w-4 h-4 text-sky-600 bg-gray-100 border-gray-300 rounded focus:ring-sky-500"
+                            className="w-4 h-4 text-accent bg-[#0F172A] border-slate-700 rounded focus:ring-accent"
                         />
-                        <label htmlFor="answer-key-analysis" className="text-sm font-medium text-slate-700">
+                        <label htmlFor="answer-key-analysis" className="text-xs font-mono font-bold text-slate-300 uppercase tracking-wide select-none cursor-pointer">
                             Cevap Anahtarı Analizi
                         </label>
                     </div>
                     {isAnswerKeyAnalysis && (
                         answerKeyFile ? (
-                           <ImagePreview imageUrl={answerKeyFile.url} fileName={answerKeyFile.file.name} onClear={handleAnswerKeyClear} />
+                           <div className="mt-2">
+                             <ImagePreview imageUrl={answerKeyFile.url} fileName={answerKeyFile.file.name} onClear={handleAnswerKeyClear} />
+                           </div>
                         ) : (
                            <AnswerKeyDropzone onFileSelect={handleAnswerKeySelect} disabled={!isAnswerKeyAnalysis || isLoading}/>
                         )
                     )}
                 </div>
-                 <AnalyzeButton 
+
+                {isAnswerKeyAnalysis && (
+                    <div className="space-y-3 pt-3 border-t border-slate-700/50">
+                        <div className="flex items-center space-x-2">
+                            <input
+                                type="checkbox"
+                                id="penalty-enabled"
+                                checked={isPenaltyEnabled}
+                                onChange={(e) => setIsPenaltyEnabled(e.target.checked)}
+                                disabled={isLoading}
+                                className="w-4 h-4 text-accent bg-[#0F172A] border-slate-700 rounded focus:ring-accent"
+                            />
+                            <label htmlFor="penalty-enabled" className="text-xs font-mono font-bold text-slate-300 uppercase tracking-wide select-none cursor-pointer">
+                                Yanlışlar Doğruları Götürsün
+                            </label>
+                        </div>
+                        {isPenaltyEnabled && (
+                            <div className="space-y-1.5 pl-6">
+                                <label htmlFor="penalty-ratio" className="block text-[10px] font-mono font-bold text-accent uppercase tracking-wider">
+                                    Net Hesabı Oranı
+                                </label>
+                                <select
+                                    id="penalty-ratio"
+                                    value={penaltyRatio}
+                                    onChange={(e) => setPenaltyRatio(Number(e.target.value))}
+                                    disabled={isLoading}
+                                    className="block w-full px-2 py-1.5 bg-[#0F172A] border border-slate-700 rounded-md focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent text-xs text-[#F8FAFC] disabled:bg-slate-800 disabled:text-slate-500"
+                                >
+                                    <option value={3}>3 Yanlış 1 Doğruyu Götürür</option>
+                                    <option value={4}>4 Yanlış 1 Doğruyu Götürür</option>
+                                    <option value={5}>5 Yanlış 1 Doğruyu Götürür</option>
+                                    <option value={2}>2 Yanlış 1 Doğruyu Götürür</option>
+                                </select>
+                            </div>
+                        )}
+                    </div>
+                )}
+                <div className="pt-2">
+                  <AnalyzeButton 
                     onClick={handleAnalyzeClick} 
                     disabled={files.length === 0 || isLoading || (isAnswerKeyAnalysis && !answerKeyFile)} 
                     isLoading={isLoading} 
+                  />
+                </div>
+              </div>
+
+              <div className="bg-[#1E293B] border border-slate-700/30 p-5 rounded-xl text-xs leading-relaxed flex-grow-0">
+                <div className="font-mono text-accent text-[11px] mb-3 uppercase tracking-widest font-bold">[ HIZLI İPUÇLARI ]</div>
+                <ul className="space-y-2 text-slate-300 font-medium">
+                  <li>• Fotoğrafları tam tepeden çekin.</li>
+                  <li>• İyi ışık analizi hızlandırır.</li>
+                  <li>• Her karede bir öğrenci olsun.</li>
+                </ul>
+              </div>
+            </aside>
+
+            <main className="bg-[#1E293B] p-6 rounded-xl border border-slate-700/30 min-h-[calc(100vh-220px)] flex flex-col lg:col-span-3 overflow-auto relative">
+              <div className="absolute inset-0 opacity-5 pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle, #F8FAFC 1px, transparent 1px)', backgroundSize: '24px 24px' }}></div>
+              <h2 className="text-xs font-syne font-extrabold uppercase tracking-widest text-[#F8FAFC] mb-4 border-b border-slate-700/40 pb-3 z-10">[ Analiz Sonuçları ]</h2>
+              <div className="z-10 flex flex-col flex-grow">
+                {consensusKey && <AnswerKeyDisplay answerKey={consensusKey} onEdit={() => setIsAnswerKeyEditing(true)} />}
+                <ResultsDisplay
+                  results={processedResults}
+                  isLoading={isLoading}
+                  error={error}
+                  selectedIds={selectedResultIds}
+                  onSelectionChange={handleSelectionChange}
+                  onSelectAll={handleSelectAll}
+                  onEdit={handleEditResult}
+                  progress={progress}
                 />
-               </div>
-            </div>
-            <div className="bg-white p-6 rounded-2xl shadow-md border border-slate-200 min-h-[calc(100vh-280px)] flex flex-col lg:col-span-3 overflow-auto">
-              <h2 className="text-xl font-semibold text-slate-700 mb-4 border-b pb-3">Analiz Sonuçları</h2>
-              {consensusKey && <AnswerKeyDisplay answerKey={consensusKey} onEdit={() => setIsAnswerKeyEditing(true)} />}
-              <ResultsDisplay
-                results={analysisResults}
-                isLoading={isLoading}
-                error={error}
-                selectedIds={selectedResultIds}
-                onSelectionChange={handleSelectionChange}
-                onSelectAll={handleSelectAll}
-                onEdit={handleEditResult}
-                progress={progress}
-              />
-            </div>
+              </div>
+            </main>
           </div>
         </main>
       </div>

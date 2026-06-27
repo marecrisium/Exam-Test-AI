@@ -89,25 +89,27 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({ onRunTest, isTesting }) => {
   return (
-    <header className="relative text-center">
-      <div className="absolute top-0 right-0 hidden md:block">
+    <header className="flex flex-col md:flex-row justify-between items-center pb-4 border-b-2 border-accent mb-8 mt-2 gap-4">
+      <div className="flex items-center gap-3">
+        <ExamPapersStackIcon className="w-8 h-8 text-accent animate-pulse" />
+        <h1 className="font-syne text-2xl md:text-3xl font-extrabold uppercase tracking-tight text-[#F8FAFC]">
+          Sınav Analizi <span className="text-accent">v1.0</span>
+        </h1>
+      </div>
+      <div className="flex items-center gap-4">
+        <div className="font-mono text-[10px] md:text-xs text-accent opacity-70 tracking-wider">
+          SİSTEM AKTİF // 010110
+        </div>
         {onRunTest && (
-            <button 
-                onClick={onRunTest}
-                disabled={isTesting}
-                className="flex items-center gap-1 text-xs font-medium text-slate-400 hover:text-sky-600 transition-colors bg-slate-100 px-3 py-1.5 rounded-full border border-slate-200"
-            >
-                {isTesting ? <span className="animate-pulse">Test Çalışıyor...</span> : 'Sistem Testi Başlat'}
-            </button>
+          <button 
+            onClick={onRunTest}
+            disabled={isTesting}
+            className="flex items-center gap-1 font-mono text-[10px] md:text-xs font-semibold text-slate-900 bg-accent hover:bg-accent-hover disabled:bg-slate-700 disabled:text-slate-500 transition-colors px-3 py-1.5 rounded uppercase"
+          >
+            {isTesting ? <span className="animate-pulse">Test Çalışıyor...</span> : 'Sistem Testi'}
+          </button>
         )}
       </div>
-      <div className="flex items-center justify-center gap-3">
-        <ExamPapersStackIcon className="w-10 h-10 text-sky-500" />
-        <h1 className="text-4xl font-bold text-slate-800 tracking-tight">Sınav Analizi</h1>
-      </div>
-      <p className="mt-3 text-lg text-slate-600 max-w-2xl mx-auto">
-        Bir sınav kağıdı veya belge fotoğrafı yükleyin. Gemini, içeriği analiz edip verileri sizin için yapılandırsın.
-      </p>
     </header>
   );
 };

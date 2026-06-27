@@ -52,11 +52,11 @@ export const AnswerKeyDropzone: React.FC<AnswerKeyDropzoneProps> = ({ onFileSele
 
   return (
     <div
-      className={`relative flex flex-col items-center justify-center w-full p-4 border-2 border-dashed rounded-2xl transition-colors duration-300 ${
+      className={`relative flex flex-col items-center justify-center w-full p-4 border-2 border-dashed rounded-2xl transition-all duration-300 ${
         disabled 
-        ? 'border-slate-200 bg-slate-100 cursor-not-allowed' 
-        : 'border-slate-300 bg-slate-100 cursor-pointer hover:border-sky-400 hover:bg-sky-50'
-      }`}
+        ? 'border-slate-700 bg-slate-800/40 opacity-50 cursor-not-allowed' 
+        : 'border-accent/30 bg-gradient-to-b from-accent/5 to-transparent hover:border-accent hover:bg-accent/10 cursor-pointer'
+      } bg-[#1E293B]`}
       onClick={handleClick}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
@@ -70,12 +70,15 @@ export const AnswerKeyDropzone: React.FC<AnswerKeyDropzoneProps> = ({ onFileSele
         disabled={disabled}
       />
       <div className="flex flex-col items-center justify-center text-center">
-        <KeyIcon className={`w-7 h-7 mb-2 ${disabled ? 'text-slate-400' : 'text-slate-500'}`} />
-        <p className={`text-sm font-semibold ${disabled ? 'text-slate-500' : 'text-slate-700'}`}>
-            Cevap Anahtarını Yükle
+        <KeyIcon className={`w-7 h-7 mb-2 ${disabled ? 'text-slate-600' : 'text-accent'}`} />
+        <div className={`font-mono text-xs uppercase tracking-widest ${disabled ? 'text-slate-500' : 'text-accent'}`}>
+          [ CEVAP ANAHTARI SEÇİN ]
+        </div>
+        <p className={`text-xs mt-1 ${disabled ? 'text-slate-500' : 'text-slate-300'}`}>
+          PNG veya JPEG dosyası yükleyin
         </p>
       </div>
-       {error && <p className="mt-2 text-xs text-red-500">{error}</p>}
+       {error && <p className="mt-2 text-xs font-mono text-rose-400">{error}</p>}
     </div>
   );
 };

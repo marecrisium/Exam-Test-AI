@@ -76,9 +76,9 @@ export const Dropzone: React.FC<DropzoneProps> = ({ onFileSelect }) => {
 
   return (
     <div
-      className={`relative flex flex-col items-center justify-center w-full h-48 border-2 border-dashed rounded-2xl cursor-pointer transition-colors duration-300 ${
-        isDragging ? 'border-sky-500 bg-sky-50' : 'border-slate-300 bg-slate-100 hover:border-sky-400 hover:bg-sky-50'
-      }`}
+      className={`relative flex flex-col items-center justify-center w-full h-48 border-2 border-dashed rounded-2xl cursor-pointer transition-all duration-300 p-6 ${
+        isDragging ? 'border-accent bg-accent/20' : 'border-accent/30 bg-gradient-to-b from-accent/5 to-transparent hover:border-accent hover:bg-accent/10'
+      } bg-[#1E293B]`}
       onDragEnter={handleDragEnter}
       onDragLeave={handleDragLeave}
       onDragOver={handleDragOver}
@@ -93,14 +93,15 @@ export const Dropzone: React.FC<DropzoneProps> = ({ onFileSelect }) => {
         onChange={handleChange}
         multiple
       />
-      <div className="flex flex-col items-center justify-center pt-5 pb-6 text-center">
-        <UploadIcon className="w-8 h-8 mb-3 text-slate-500" />
-        <p className="mb-2 text-sm font-semibold text-slate-700">
-            Dosyaları sürükleyip bırakın veya seçmek için tıklayın
+      <div className="flex flex-col items-center justify-center text-center">
+        <UploadIcon className="w-8 h-8 mb-3 text-accent" />
+        <div className="font-mono text-accent text-xs mb-2 uppercase tracking-widest">[ ÖĞRENCİ KAĞIDI YÜKLEME ]</div>
+        <p className="text-sm font-semibold text-slate-100">
+            Sürükleyip bırakın veya seçmek için tıklayın
         </p>
-        <p className="text-sm text-slate-500">PNG veya JPEG (En fazla 20 adet)</p>
+        <p className="text-xs text-slate-400 mt-1">PNG veya JPEG (En fazla 20 adet)</p>
       </div>
-      {error && <p className="absolute bottom-4 text-sm text-red-500">{error}</p>}
+      {error && <p className="absolute bottom-4 text-xs font-mono text-rose-400">{error}</p>}
     </div>
   );
 };

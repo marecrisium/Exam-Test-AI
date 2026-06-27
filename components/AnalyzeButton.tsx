@@ -14,11 +14,11 @@ export const AnalyzeButton: React.FC<AnalyzeButtonProps> = ({ onClick, disabled,
             <button
                 onClick={onClick}
                 disabled={disabled}
-                className="inline-flex items-center justify-center gap-2 px-8 py-3 font-semibold text-white bg-sky-600 rounded-full shadow-md hover:bg-sky-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-sky-500 disabled:bg-slate-400 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-105"
+                className="w-full inline-flex items-center justify-center gap-2 px-6 py-3.5 font-syne font-extrabold text-slate-900 bg-accent hover:bg-[#0ea5e9] disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed transition-all duration-200 uppercase rounded-lg tracking-wider"
             >
                 {isLoading ? (
                     <>
-                        <LoadingSpinnerIcon className="w-5 h-5"/>
+                        <LoadingSpinnerIcon className="w-5 h-5 animate-spin"/>
                         <span>Analiz Ediliyor...</span>
                     </>
                 ) : (

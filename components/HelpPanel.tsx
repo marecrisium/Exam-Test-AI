@@ -8,8 +8,8 @@ interface HelpPanelProps {
 
 const HelpSection: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
     <div>
-        <h3 className="text-lg font-semibold text-slate-700 mb-2">{title}</h3>
-        <div className="space-y-2 text-slate-600">
+        <h3 className="text-xs font-syne font-extrabold uppercase tracking-widest text-accent border-b border-slate-700/50 pb-1.5 mb-2">{title}</h3>
+        <div className="space-y-2 text-xs text-slate-300 leading-relaxed">
             {children}
         </div>
     </div>
@@ -22,24 +22,24 @@ export const HelpPanel: React.FC<HelpPanelProps> = ({ isOpen, onClose }) => {
             {/* Backdrop */}
             <div
                 onClick={onClose}
-                className={`fixed inset-0 bg-black bg-opacity-50 z-40 transition-opacity duration-300 ${isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+                className={`fixed inset-0 bg-black bg-opacity-60 z-40 transition-opacity duration-300 ${isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
             />
             {/* Panel */}
             <div
-                className={`fixed top-0 right-0 h-full w-full max-w-md bg-slate-50 shadow-2xl z-50 transform transition-transform duration-300 ease-in-out ${isOpen ? 'translate-x-0' : 'translate-x-full'}`}
+                className={`fixed top-0 right-0 h-full w-full max-w-md bg-[#1E293B] shadow-2xl z-50 transform transition-transform duration-300 ease-in-out border-l border-slate-700/50 ${isOpen ? 'translate-x-0' : 'translate-x-full'}`}
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="help-panel-title"
             >
                 <div className="flex flex-col h-full">
-                    <div className="flex items-center justify-between p-4 border-b border-slate-200 bg-white">
+                    <div className="flex items-center justify-between p-4 border-b border-slate-700/50 bg-[#0F172A]">
                         <div className="flex items-center gap-3">
-                            <QuestionMarkCircleIcon className="w-6 h-6" />
-                            <h2 id="help-panel-title" className="text-lg font-semibold text-slate-800">Yardım & İpuçları</h2>
+                            <QuestionMarkCircleIcon className="w-6 h-6 text-accent" />
+                            <h2 id="help-panel-title" className="text-sm font-syne font-extrabold uppercase tracking-widest text-[#F8FAFC]">YARDIM & İPUÇLARI</h2>
                         </div>
                         <button
                             onClick={onClose}
-                            className="p-1 text-slate-500 rounded-full hover:bg-slate-200 hover:text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-500"
+                            className="p-1.5 text-slate-400 rounded-lg hover:bg-slate-800 hover:text-accent focus:outline-none"
                             aria-label="Yardım panelini kapat"
                         >
                             <XIcon className="w-6 h-6" />
@@ -59,7 +59,7 @@ export const HelpPanel: React.FC<HelpPanelProps> = ({ isOpen, onClose }) => {
                                 <li><strong>Otomatik Notlandırma:</strong> "Cevap Anahtarı Analizi" modunu kullanarak notlandırma işlemini otomatikleştirin. Bu mod, önce cevap anahtarını analiz eder, sonra öğrenci kağıtlarındaki cevapları bu anahtarla karşılaştırarak puanları hesaplar.</li>
                                 <li><strong>Toplu Analiz:</strong> Çok sayıda kağıt analiz ediyorsanız, işlem biraz zaman alabilir. Lütfen sabırla bekleyiniz.</li>
                                 <li><strong>Excel Özelleştirme:</strong> Analiz sonrası Excel'e aktarmadan önce "Excel Sütun Başlıkları" bölümünden dışa aktarılacak verileri ve başlıklarını özelleştirebilirsiniz.</li>
-                            </ul>
+                             </ul>
                         </HelpSection>
 
                         <HelpSection title="İpuçları ve Püf Noktaları">

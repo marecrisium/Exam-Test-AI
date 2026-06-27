@@ -49,7 +49,7 @@ export const ResultsDisplay: React.FC<ResultsDisplayProps> = ({ results, isLoadi
 
   const stats = useMemo(() => {
     if (!results || results.length === 0) return { mean: 0, max: 0, min: 0 };
-    const scores = results.map(r => Number(r.scores.reduce((sum, s) => sum + s, 0).toFixed(2)));
+    const scores = results.map(r => Number(Math.max(0, r.scores.reduce((sum, s) => sum + s, 0)).toFixed(2)));
     const sum = scores.reduce((acc, curr) => acc + curr, 0);
     const mean = Number((sum / scores.length).toFixed(2));
     const max = Math.max(...scores);
@@ -59,7 +59,7 @@ export const ResultsDisplay: React.FC<ResultsDisplayProps> = ({ results, isLoadi
 
   const { absoluteMax, absoluteMin, hasMultipleDistinct } = useMemo(() => {
     if (!results || results.length === 0) return { absoluteMax: 0, absoluteMin: 0, hasMultipleDistinct: false };
-    const scores = results.map(r => Number(r.scores.reduce((sum, s) => sum + s, 0).toFixed(2)));
+    const scores = results.map(r => Number(Math.max(0, r.scores.reduce((sum, s) => sum + s, 0)).toFixed(2)));
     const maxVal = Math.max(...scores);
     const minVal = Math.min(...scores);
     return {
@@ -120,20 +120,25 @@ export const ResultsDisplay: React.FC<ResultsDisplayProps> = ({ results, isLoadi
                 case 'studentName': return item.studentName;
                 case 'studentNumber': return item.studentNumber;
                 case 'subject': return item.subject;
-                case 'totalScore': return Number(item.scores.reduce((sum, score) => sum + score, 0).toFixed(2));
+                case 'totalScore': return Number(Math.max(0, item.scores.reduce((sum, score) => sum + score, 0)).toFixed(2));
                 default: return '';
             }
         });
         if (scoresColumn.selected) {
             for (let i = 0; i < maxScores; i++) {
-                row.push(item.scores[i] ?? '');
+                const score = item.scores[i];
+                if (score !== undefined) {
+                    row.push(Number(score.toFixed(2)));
+                } else {
+                    row.push(0);
+                }
             }
         }
         return row;
     });
 
     // Calculate stats for exported students
-    const exportedScores = selectedResults.map(r => Number(r.scores.reduce((sum, s) => sum + s, 0).toFixed(2)));
+    const exportedScores = selectedResults.map(r => Number(Math.max(0, r.scores.reduce((sum, s) => sum + s, 0)).toFixed(2)));
     const exportedSum = exportedScores.reduce((acc, curr) => acc + curr, 0);
     const exportedMean = exportedScores.length > 0 ? Number((exportedSum / exportedScores.length).toFixed(2)) : 0;
     const exportedMax = exportedScores.length > 0 ? Math.max(...exportedScores) : 0;
@@ -188,16 +193,16 @@ export const ResultsDisplay: React.FC<ResultsDisplayProps> = ({ results, isLoadi
   if (isLoading) {
     const progressPercentage = progress.total > 0 ? (progress.current / progress.total) * 100 : 0;
     return (
-      <div className="flex flex-col items-center justify-center flex-grow text-center">
-        <LoadingSpinnerIcon className="w-12 h-12 text-sky-500" />
-        <p className="mt-4 text-slate-600">{progress.message || 'Görüntüler analiz ediliyor...'}</p>
+      <div className="flex flex-col items-center justify-center flex-grow text-center py-12">
+        <LoadingSpinnerIcon className="w-12 h-12 text-accent animate-spin mb-4" />
+        <p className="mt-4 text-slate-200 font-medium">{progress.message || 'Görüntüler analiz ediliyor...'}</p>
         {progress.total > 1 && (
-            <div className="w-full max-w-xs bg-slate-200 rounded-full h-2.5 mt-4">
-                <div className="bg-sky-500 h-2.5 rounded-full" style={{ width: `${progressPercentage}%` }}></div>
+            <div className="w-full max-w-xs bg-slate-800 rounded-full h-2 mt-4 border border-slate-700/50 overflow-hidden">
+                <div className="bg-accent h-2 rounded-full transition-all duration-300" style={{ width: `${progressPercentage}%` }}></div>
             </div>
         )}
-        <p className="text-sm text-slate-500 mt-2">
-            {progress.total > 1 ? `${progress.current} / ${progress.total} dosya tamamlandı` : 'Bu işlem biraz zaman alabilir.'}
+        <p className="text-xs font-mono text-slate-400 mt-3">
+            {progress.total > 1 ? `${progress.current} / ${progress.total} DOSYA TAMAMLANDI` : 'BU İŞLEM BİRAZ ZAMAN ALABİLİR.'}
         </p>
       </div>
     );
@@ -205,10 +210,10 @@ export const ResultsDisplay: React.FC<ResultsDisplayProps> = ({ results, isLoadi
 
   if (error) {
     return (
-      <div className="flex items-center justify-center flex-grow text-center">
-        <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-lg">
-          <p className="font-semibold">Bir Hata Oluştu</p>
-          <p className="text-sm">{error}</p>
+      <div className="flex items-center justify-center flex-grow text-center py-12">
+        <div className="bg-rose-950/20 border border-rose-500/30 text-rose-200 p-6 rounded-xl max-w-md">
+          <p className="font-syne font-extrabold uppercase text-sm tracking-wider text-rose-400 mb-2">[ SİSTEM HATASI ]</p>
+          <p className="text-sm font-mono">{error}</p>
         </div>
       </div>
     );
@@ -216,8 +221,9 @@ export const ResultsDisplay: React.FC<ResultsDisplayProps> = ({ results, isLoadi
 
   if (results.length === 0) {
     return (
-      <div className="flex items-center justify-center flex-grow text-center">
-        <p className="text-slate-500">Sonuçları görmek için bir veya daha fazla resim yükleyin ve analizi başlatın.</p>
+      <div className="flex flex-col items-center justify-center flex-grow text-center py-12 px-6">
+        <p className="font-mono text-xs text-accent opacity-50 uppercase tracking-widest mb-3">[ BEKLEME MODU ]</p>
+        <p className="text-sm text-slate-300 max-w-sm">İşlemi başlatmak için sol panelden sınav kağıtlarını yükleyip analizi tetikleyin.</p>
       </div>
     );
   }
@@ -228,24 +234,24 @@ export const ResultsDisplay: React.FC<ResultsDisplayProps> = ({ results, isLoadi
   return (
     <div className="flex flex-col flex-grow">
       <div className="flex-grow overflow-auto">
-        <div className="bg-slate-100 p-4 rounded-lg space-y-4 mb-6">
-            <h3 className="text-md font-semibold text-slate-600">Excel Sütun Başlıkları</h3>
-            <p className="text-xs text-slate-500">Dışa aktarılacak Excel dosyasındaki sütunları seçip başlıklarını düzenleyebilirsiniz.</p>
+        <div className="bg-[#1E293B] border border-slate-700/50 p-5 rounded-xl space-y-4 mb-6">
+            <h3 className="text-xs font-syne font-extrabold uppercase tracking-widest text-[#F8FAFC]">[ Excel Sütun Başlıkları ]</h3>
+            <p className="text-xs text-slate-300">Dışa aktarılacak Excel dosyasındaki sütunları seçip başlıklarını düzenleyebilirsiniz.</p>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 text-sm">
                 {/* FIX: Use Object.keys to avoid issues with Object.entries typing. */}
                 {staticColumnKeys.map((key) => {
                      const config = staticColumns[key];
                      return (
                      <div key={key}>
-                        <div className="flex items-center mb-1 space-x-2">
+                        <div className="flex items-center mb-1.5 space-x-2">
                            <input
                                 type="checkbox"
                                 id={`${key}-checkbox`}
                                 checked={config.selected}
                                 onChange={(e) => handleStaticColumnChange(key, 'selected', e.target.checked)}
-                                className="w-4 h-4 text-sky-600 bg-gray-100 border-gray-300 rounded focus:ring-sky-500 shrink-0"
+                                className="w-4 h-4 text-accent bg-[#0F172A] border-slate-700 rounded focus:ring-accent focus:ring-offset-[#1E293B] shrink-0"
                             />
-                            <label htmlFor={`${key}-input`} className="block text-xs font-medium text-slate-500 capitalize truncate">
+                            <label htmlFor={`${key}-input`} className="block text-xs font-mono font-bold text-accent/80 uppercase truncate">
                                 {key.replace(/([A-Z])/g, ' $1').trim()}
                             </label>
                         </div>
@@ -254,22 +260,22 @@ export const ResultsDisplay: React.FC<ResultsDisplayProps> = ({ results, isLoadi
                             id={`${key}-input`}
                             value={config.label}
                             onChange={(e) => handleStaticColumnChange(key, 'label', e.target.value)}
-                            className="block w-full px-2 py-1.5 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 sm:text-sm bg-white"
+                            className="block w-full px-3 py-1.5 border border-slate-700 rounded-md focus:outline-none focus:ring-accent focus:border-accent sm:text-xs bg-[#0F172A] text-slate-100 font-medium"
                         />
                     </div>
                 );
                 })}
                 {maxScores > 0 && (
                      <div>
-                        <div className="flex items-center mb-1 space-x-2">
+                        <div className="flex items-center mb-1.5 space-x-2">
                            <input
                                 type="checkbox"
                                 id="scores-checkbox"
                                 checked={scoresColumn.selected}
                                 onChange={(e) => handleScoresColumnChange('selected', e.target.checked)}
-                                className="w-4 h-4 text-sky-600 bg-gray-100 border-gray-300 rounded focus:ring-sky-500 shrink-0"
+                                className="w-4 h-4 text-accent bg-[#0F172A] border-slate-700 rounded focus:ring-accent focus:ring-offset-[#1E293B] shrink-0"
                             />
-                            <label htmlFor="scores-input" className="block text-xs font-medium text-slate-500 capitalize truncate">
+                            <label htmlFor="scores-input" className="block text-xs font-mono font-bold text-accent/80 uppercase truncate">
                                 Cevaplar
                             </label>
                         </div>
@@ -278,7 +284,7 @@ export const ResultsDisplay: React.FC<ResultsDisplayProps> = ({ results, isLoadi
                             id="scores-input"
                             value={scoresColumn.label}
                             onChange={(e) => handleScoresColumnChange('label', e.target.value)}
-                            className="block w-full px-2 py-1.5 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 sm:text-sm bg-white"
+                            className="block w-full px-3 py-1.5 border border-slate-700 rounded-md focus:outline-none focus:ring-accent focus:border-accent sm:text-xs bg-[#0F172A] text-slate-100 font-medium"
                         />
                     </div>
                 )}
@@ -287,34 +293,34 @@ export const ResultsDisplay: React.FC<ResultsDisplayProps> = ({ results, isLoadi
 
         {/* Sınav İstatistikleri */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-            <div className="bg-slate-50 p-4 rounded-xl border border-slate-250 shadow-xs flex flex-col justify-center">
-                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Ortalama Puan</span>
-                <span className="text-2xl font-bold font-mono text-slate-800 mt-1">{stats.mean}</span>
+            <div className="bg-[#1E293B] p-4 rounded-xl border border-slate-700/50 shadow-xs flex flex-col justify-center">
+                <span className="text-[10px] font-mono font-bold text-accent/80 uppercase tracking-widest">Ortalama Puan</span>
+                <span className="text-2xl font-syne font-extrabold text-[#F8FAFC] mt-1">{stats.mean}</span>
             </div>
-            <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-250/30 shadow-xs flex flex-col justify-center">
+            <div className="bg-emerald-950/20 p-4 rounded-xl border border-emerald-500/20 shadow-xs flex flex-col justify-center">
                 <div className="flex items-center space-x-1.5">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                    <span className="text-xs font-semibold text-emerald-700 uppercase tracking-wider">En Yüksek Puan</span>
+                    <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                    <span className="text-[10px] font-mono font-bold text-emerald-400 uppercase tracking-widest">En Yüksek Puan</span>
                 </div>
-                <span className="text-2xl font-bold font-mono text-emerald-900 mt-1">{stats.max}</span>
+                <span className="text-2xl font-syne font-extrabold text-emerald-400 mt-1">{stats.max}</span>
             </div>
-            <div className="bg-rose-50/50 p-4 rounded-xl border border-rose-250/30 shadow-xs flex flex-col justify-center">
+            <div className="bg-rose-950/20 p-4 rounded-xl border border-rose-500/20 shadow-xs flex flex-col justify-center">
                 <div className="flex items-center space-x-1.5">
-                    <span className="w-2 h-2 rounded-full bg-rose-500"></span>
-                    <span className="text-xs font-semibold text-rose-700 uppercase tracking-wider">En Düşük Puan</span>
+                    <span className="w-2 h-2 rounded-full bg-rose-400"></span>
+                    <span className="text-[10px] font-mono font-bold text-rose-400 uppercase tracking-widest">En Düşük Puan</span>
                 </div>
-                <span className="text-2xl font-bold font-mono text-rose-900 mt-1">{stats.min}</span>
+                <span className="text-2xl font-syne font-extrabold text-rose-400 mt-1">{stats.min}</span>
             </div>
         </div>
 
-        <div className="relative overflow-x-auto">
-            <table className="w-full text-sm text-left text-slate-600">
-                <thead className="text-xs text-slate-700 uppercase bg-slate-100 rounded-t-lg">
+        <div className="relative overflow-x-auto border border-slate-700/50 rounded-xl">
+            <table className="w-full text-sm text-left text-slate-300">
+                <thead className="text-xs text-slate-200 uppercase bg-[#1E293B] border-b border-slate-700/50 font-mono">
                     <tr>
-                        <th scope="col" className="p-4">
+                        <th scope="col" className="p-4 w-4">
                             <input 
                                 type="checkbox" 
-                                className="w-4 h-4 text-sky-600 bg-gray-100 border-gray-300 rounded focus:ring-sky-500"
+                                className="w-4 h-4 text-accent bg-[#0F172A] border-slate-700 rounded focus:ring-accent focus:ring-offset-[#1E293B]"
                                 checked={results.length > 0 && selectedIds.size === results.length}
                                 onChange={(e) => onSelectAll(e.target.checked)}
                             />
@@ -322,33 +328,33 @@ export const ResultsDisplay: React.FC<ResultsDisplayProps> = ({ results, isLoadi
                         {/* FIX: Use Object.keys to avoid issues with Object.entries typing. */}
                         {staticColumnKeys.map((key) => {
                            const config = staticColumns[key];
-                           return config.selected && <th key={key} scope="col" className="px-4 py-3">{config.label}</th>;
+                           return config.selected && <th key={key} scope="col" className="px-4 py-3 font-semibold">{config.label}</th>;
                         })}
                         {scoresColumn.selected && Array.from({ length: maxScores }).map((_, i) => (
-                            <th key={`score-header-${i}`} scope="col" className="px-4 py-3 text-center">{`${scoresColumn.label} ${i + 1}`}</th>
+                            <th key={`score-header-${i}`} scope="col" className="px-4 py-3 text-center font-semibold">{`${scoresColumn.label} ${i + 1}`}</th>
                         ))}
-                        <th scope="col" className="px-4 py-3 text-center">İşlemler</th>
+                        <th scope="col" className="px-4 py-3 text-center font-semibold">İşlemler</th>
                     </tr>
                 </thead>
                 <tbody>
                     {results.map((item) => {
-                        const itemScore = Number(item.scores.reduce((sum, s) => sum + s, 0).toFixed(2));
+                        const itemScore = Number(Math.max(0, item.scores.reduce((sum, s) => sum + s, 0)).toFixed(2));
                         const isMax = hasMultipleDistinct && itemScore === absoluteMax;
                         const isMin = hasMultipleDistinct && itemScore === absoluteMin;
                         
-                        let rowClass = "bg-white border-b hover:bg-slate-50 transition-colors";
+                        let rowClass = "bg-[#0F172A] border-b border-slate-800 hover:bg-slate-800/40 text-slate-100 transition-colors";
                         if (isMax) {
-                            rowClass = "bg-emerald-50/70 hover:bg-emerald-100/70 border-b border-emerald-100/30 text-emerald-950 transition-colors";
+                            rowClass = "bg-emerald-950/25 hover:bg-emerald-950/35 border-b border-emerald-900/40 text-emerald-200 transition-colors";
                         } else if (isMin) {
-                            rowClass = "bg-rose-50/70 hover:bg-rose-100/70 border-b border-rose-100/30 text-rose-950 transition-colors";
+                            rowClass = "bg-rose-950/25 hover:bg-rose-950/35 border-b border-rose-900/40 text-rose-200 transition-colors";
                         }
                         
                         return (
                             <tr key={item.id} className={rowClass}>
-                                <td className="w-4 p-4">
+                                <td className="p-4 w-4">
                                     <input 
                                         type="checkbox" 
-                                        className="w-4 h-4 text-sky-600 bg-gray-100 border-gray-300 rounded focus:ring-sky-500"
+                                        className="w-4 h-4 text-accent bg-[#0F172A] border-slate-700 rounded focus:ring-accent focus:ring-offset-[#1E293B]"
                                         checked={selectedIds.has(item.id)}
                                         onChange={() => onSelectionChange(item.id)}
                                     />
@@ -362,17 +368,48 @@ export const ResultsDisplay: React.FC<ResultsDisplayProps> = ({ results, isLoadi
                                       case 'studentName': content = item.studentName; break;
                                       case 'studentNumber': content = item.studentNumber; break;
                                       case 'subject': content = item.subject; break;
-                                      case 'totalScore': content = Number(item.scores.reduce((sum, score) => sum + score, 0).toFixed(2)); break;
+                                      case 'totalScore': content = Number(Math.max(0, item.scores.reduce((sum, score) => sum + score, 0)).toFixed(2)); break;
                                     }
                                     return <td key={key} className="px-4 py-3 font-medium">{content}</td>;
                                 })}
-                                {scoresColumn.selected && Array.from({ length: maxScores }).map((_, i) => (
-                                    <td key={`score-cell-${i}`} className="px-4 py-3 font-mono text-center">{item.scores[i] ?? ''}</td>
-                                ))}
+                                {scoresColumn.selected && Array.from({ length: maxScores }).map((_, i) => {
+                                    const score = item.scores[i];
+                                    const hasScore = score !== undefined;
+                                    const studentAns = item.answers?.[i]?.trim() || '';
+                                    
+                                    if (!hasScore) {
+                                        return (
+                                            <td key={`score-cell-${i}`} className="px-4 py-3 font-mono text-center select-none text-xs text-slate-600">
+                                                -
+                                            </td>
+                                        );
+                                    }
+                                    
+                                    if (score > 0) {
+                                        return (
+                                            <td key={`score-cell-${i}`} className="px-4 py-3 font-mono text-center select-none text-sm text-emerald-400 font-extrabold" title={`Doğru (${score} Puan)`}>
+                                                +{Number(score.toFixed(2))}
+                                            </td>
+                                        );
+                                    } else if (score < 0) {
+                                        return (
+                                            <td key={`score-cell-${i}`} className="px-4 py-3 font-mono text-center select-none text-sm text-rose-400 font-bold" title={`Yanlış Ceza (${score} Puan)`}>
+                                                {Number(score.toFixed(2))}
+                                            </td>
+                                        );
+                                    } else {
+                                        const isBlank = studentAns === '';
+                                        return (
+                                            <td key={`score-cell-${i}`} className={`px-4 py-3 font-mono text-center select-none text-sm ${isBlank ? 'text-slate-500 font-normal' : 'text-rose-400/70 font-semibold'}`} title={isBlank ? 'Boş (0 Puan)' : 'Yanlış (0 Puan)'}>
+                                                {isBlank ? 'Boş' : '0'}
+                                            </td>
+                                        );
+                                    }
+                                })}
                                 <td className="px-4 py-3 text-center">
                                     <button
                                         onClick={() => onEdit(item.id)}
-                                        className="p-1.5 text-slate-500 hover:text-sky-600 hover:bg-sky-100 rounded-md transition-colors"
+                                        className="p-1.5 text-slate-400 hover:text-accent hover:bg-slate-800 rounded-lg transition-colors"
                                         aria-label="Sonucu Düzenle"
                                     >
                                         <PencilIcon className="w-5 h-5" />
@@ -385,11 +422,11 @@ export const ResultsDisplay: React.FC<ResultsDisplayProps> = ({ results, isLoadi
             </table>
         </div>
       </div>
-       <div className="mt-4 pt-4 border-t border-slate-200">
+       <div className="mt-5 pt-4 border-t border-slate-800">
          <button 
            onClick={handleExport}
            disabled={selectedIds.size === 0}
-           className="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-sky-600 rounded-lg hover:bg-sky-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-sky-500 disabled:bg-slate-400 disabled:cursor-not-allowed transition-colors"
+           className="w-full flex items-center justify-center gap-2 px-6 py-3.5 font-syne font-extrabold text-slate-900 bg-accent hover:bg-[#0ea5e9] disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed transition-all duration-200 uppercase rounded-lg tracking-wider"
          >
            {isCopied ? <CheckIcon className="w-5 h-5" /> : <DownloadIcon className="w-5 h-5" />}
            {isCopied ? 'XLSX İndirildi!' : `Seçili (${selectedIds.size}) Sonucu İndir`}

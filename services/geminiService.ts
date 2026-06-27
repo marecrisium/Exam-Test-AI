@@ -103,7 +103,7 @@ const standardAnalysisSchema = (questionCount: number) => ({
 const runGeminiRequest = async (
     parts: Part[],
     schema: object,
-    model: 'gemini-flash-latest',
+    model: 'gemini-3.1-flash-lite',
     systemInstruction?: string,
     enableThinking?: boolean
 ) => {
@@ -155,7 +155,7 @@ export const analyzeAnswerKey = async (answerKeyBase64: string, mimeType: string
     const response = await runGeminiRequest(
         [{ text: answerKeyPrompt }, answerKeyImagePart], 
         schema,
-        'gemini-flash-latest'
+        'gemini-3.1-flash-lite'
     );
 
     const result = JSON.parse(response.text.trim());
@@ -179,14 +179,14 @@ export const analyzeStudentPaper = async (
 ): Promise<ExamData> => {
     console.log("Öğrenci kağıdı için analiz başlatılıyor (tek sorgu)...");
     const studentPaperImagePart: Part = { inlineData: { data: studentPaperBase64, mimeType: mimeType } };
-    const prompt = `Bu çoktan seçmeli optik test formunda işaretlenmiş veya karalanmış baloncukları analiz et. Görüntüdeki sınav kağıdını dikkatle incele. Görevin, aşağıdaki bilgileri en yüksek doğrulukla çıkarmaktır: 1. **Öğrenci Adı Soyadı**: 'Öğrenci Adı' bölümünde yazan tam isim. 2. **Öğrenci Numarası**: 'Öğrenci Numarası' bölümünde yazan numara. 3. **Ders Adı**: 'Dersin Adı' bölümünde yazan ders. 4. **Öğrenci Cevapları**: Puan tablosundan, her bir soru numarasına karşılık gelen işaretli harf seçeneğini (örn: '1': 'A', '2': 'B') dikkate alarak tam olarak ${questionCount} adet öğrenci cevabını çıkar. İşaretlemeleri analiz ederken, her bir soru için en üstteki A,B,C,D,E harflerinin sütun hizasını referans al. Her yeni soru satırında bu hizalamayı koruyarak doğru seçeneği belirle. Cevapları JSON objesi yerine, sırasıyla basit bir dizi olarak çıkar. Cevapları soldan sağa, yukarıdan aşağıya doğru sırayla al. Eğer bir bilgi okunamıyorsa, kesinlikle boş bir string ("") olarak bırak. Tahminde bulunma.`;
+    const prompt = `Bu çoktan seçmeli optik test formunda işaretlenmiş veya karalanmış baloncukları analiz et. Görüntüdeki sınav kağıdını dikkatle incele. Görevin, aşağıdaki bilgileri en yüksek doğrulukla çıkarmaktır: 1. **Öğrenci Adı Soyadı**: 'Öğrenci Adı' bölümünde yazan tam isim. 2. **Öğrenci Numarası**: 'Öğrenci Numarası' bölümünde yazan numara. 3. **Ders Adı**: 'Dersin Adı' bölümünde yazan ders. 4. **Öğrenci Cevapları**: Puan tablosundan, her bir soru numarasına karşılık gelen işaretli harf seçeneğini (örn: '1': 'A', '2': 'B') dikkate alarak tam olarak ${questionCount} adet öğrenci cevabını çıkar. Eğer cevap kağıdında soru numaraları var ise sorunun numarası ile işaretlenen cevabı eşleştir, satır sütun tarama yapma. İşaretlemeleri analiz ederken, her bir soru için en üstteki A,B,C,D,E harflerinin sütun hizasını referans al. Her yeni soru satırında bu hizalamayı koruyarak doğru seçeneği belirle. Cevapları JSON objesi yerine, sırasıyla basit bir dizi olarak çıkar. Cevapları soldan sağa, yukarıdan aşağıya doğru sırayla al. Eğer bir bilgi okunamıyorsa, kesinlikle boş bir string ("") olarak bırak. Tahminde bulunma.`;
     const schema = studentPaperSchema(questionCount);
     const systemInstruction = "Sen, bir sınav kağıdı değerlendirme uzmanısın ve görevin verilen görselden kritik bilgileri hata yapmadan ayıklamaktır.";
 
     const response = await runGeminiRequest(
         [{ text: prompt }, studentPaperImagePart],
         schema,
-        'gemini-flash-latest',
+        'gemini-3.1-flash-lite',
         systemInstruction,
         true
     );
@@ -246,7 +246,7 @@ export const extractStudentData = async (
     const response = await runGeminiRequest(
         [{ text: promptText }, imagePart], 
         schema,
-        'gemini-flash-latest',
+        'gemini-3.1-flash-lite',
         systemInstruction,
         true
     );
